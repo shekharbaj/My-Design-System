@@ -1,0 +1,26 @@
+{
+  "name": "ai-design-system-creator",
+  "version": "1.0.0",
+  "description": "AI Design System Creator & Editor with local Figma Desktop Bridge",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "bridge": "node server.js",
+    "test": "echo \"Ready to test on http://localhost:9250\""
+  },
+  "keywords": [
+    "design-system",
+    "figma",
+    "figma-bridge",
+    "design-tokens",
+    "dtcg",
+    "component-matrix",
+    "ui-editor"
+  ],
+  "author": "Antigravity Pair Programmer",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.16.0"
+  }
+}

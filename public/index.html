@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Component Contract Editor &bull; Design Systems Bridge</title>
+  <link rel="stylesheet" href="css/app.css" />
+  <link rel="stylesheet" href="css/matrix.css" />
+  <link rel="stylesheet" href="css/anatomy.css" />
+</head>
+<body>
+  <div class="app-desktop-frame">
+    <!-- Top Navigation -->
+    <nav class="top-navbar" id="top-navbar"></nav>
+
+    <!-- App Body Split -->
+    <div class="app-body-container">
+      <!-- Left Sidebar Component Library -->
+      <aside class="left-sidebar" id="left-sidebar"></aside>
+
+      <!-- Center Dynamic View Stage (Editor, Preview, Matrix, Code, Figma) -->
+      <main class="app-view-container" id="app-view-container"></main>
+    </div>
+  </div>
+
+  <!-- Floating Toast Notifications -->
+  <div class="adsc-toast-container" id="toast-container"></div>
+
+  <!-- Main ES Module Application Script -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

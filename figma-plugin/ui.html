@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>AI Design System Bridge</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 12px;
+      color: #1E293B;
+      background-color: #FFFFFF;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+    .header-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      background-color: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+    .status-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: #EF4444;
+    }
+    .status-dot.online {
+      background-color: #10B981;
+      box-shadow: 0 0 8px #10B981;
+    }
+    .status-text {
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .port-tag {
+      font-family: monospace;
+      font-size: 10px;
+      background-color: #EFF6FF;
+      color: #2563EB;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+    .controls-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      padding: 4px 0;
+    }
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+      padding: 9px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
+    }
+    .btn-primary {
+      background-color: #A259FF;
+      color: #FFFFFF;
+    }
+    .btn-primary:hover {
+      background-color: #8B3DFF;
+    }
+    .btn-secondary {
+      background-color: #F1F5F9;
+      color: #334155;
+      border-color: #CBD5E1;
+    }
+    .btn-secondary:hover {
+      background-color: #E2E8F0;
+    }
+    .log-panel {
+      flex: 1;
+      background-color: #0F172A;
+      color: #F8FAFC;
+      border-radius: 6px;
+      padding: 8px;
+      font-family: monospace;
+      font-size: 10px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .log-row { line-height: 1.4; word-break: break-all; }
+    .log-time { color: #64748B; margin-right: 4px; }
+    .log-success { color: #10B981; }
+    .log-error { color: #EF4444; }
+    .footer-note {
+      margin-top: 8px;
+      font-size: 10px;
+      color: #94A3B8;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="header-card">
+    <div class="status-left">
+      <div class="status-dot" id="status-dot"></div>
+      <span class="status-text" id="status-text">Disconnected</span>
+    </div>
+    <span class="port-tag">localhost:9250</span>
+  </div>
+
+  <div class="controls-group">
+    <div class="toggle-row">
+      <label for="auto-sync-check"><strong>Live Auto-Sync:</strong></label>
+      <input type="checkbox" id="auto-sync-check" checked />
+    </div>
+
+    <button class="btn btn-primary" id="btn-pull-now">
+      Pull Latest Components from Bridge
+    </button>
+  </div>
+
+  <div class="log-panel" id="log-terminal">
+    <div class="log-row">
+      <span class="log-time">[Init]</span>
+      <span>Connecting to localhost:9250...</span>
+    </div>
+  </div>
+
+  <div class="footer-note">
+    AI Design System Creator &bull; Figma Desktop Sync v1.0
+  </div>
+
+  <script>
+    let ws = null;
+    let autoSync = true;
+    const BRIDGE_HTTP = 'http://localhost:9250';
+    const BRIDGE_WS = 'ws://localhost:9250';
+
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+    const logTerminal = document.getElementById('log-terminal');
+    const autoSyncCheck = document.getElementById('auto-sync-check');
+    const pullNowBtn = document.getElementById('btn-pull-now');
+
+    autoSyncCheck.addEventListener('change', (e) => {
+      autoSync = e.target.checked;
+      log(`Auto-sync set to ${autoSync ? 'ON' : 'OFF'}`);
+    });
+
+    pullNowBtn.addEventListener('click', () => {
+      fetchLatestPending();
+    });
+
+    function log(msg, type = 'info') {
+      const line = document.createElement('div');
+      line.className = `log-row ${type === 'success' ? 'log-success' : type === 'error' ? 'log-error' : ''}`;
+      const time = new Date().toLocaleTimeString();
+      line.innerHTML = `<span class="log-time">[${time}]</span> <span>${msg}</span>`;
+      logTerminal.appendChild(line);
+      logTerminal.scrollTop = logTerminal.scrollHeight;
+    }
+
+    // Connect to local WebSocket
+    function connectWS() {
+      try {
+        ws = new WebSocket(BRIDGE_WS);
+
+        ws.onopen = () => {
+          statusDot.className = 'status-dot online';
+          statusText.textContent = 'Bridge Connected';
+          log('Connected to Bridge WebSocket at ' + BRIDGE_WS, 'success');
+          // Identify as Figma Plugin
+          ws.send(JSON.stringify({ type: 'CLIENT_IDENTIFY', role: 'FIGMA_PLUGIN' }));
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if ((data.type === 'PUSH_TO_FIGMA' || data.type === 'SYNC_FIGMA_VARIABLES_AND_TOKENS') && data.payload) {
+              const payloadName = data.payload.component?.name || data.payload.tokens?.brand?.name || (data.type === 'SYNC_FIGMA_VARIABLES_AND_TOKENS' ? 'Design Tokens' : 'Component');
+              log(`Incoming push for "${payloadName}"!`, 'success');
+              if (autoSync) {
+                syncPayloadToCanvas(data.payload);
+              } else {
+                log('Auto-sync is disabled. Click "Pull Latest" to sync.');
+              }
+            }
+          } catch (e) {
+            console.error('WS message error:', e);
+          }
+        };
+
+        ws.onclose = () => {
+          statusDot.className = 'status-dot';
+          statusText.textContent = 'Bridge Disconnected';
+          setTimeout(connectWS, 4000);
+        };
+
+        ws.onerror = () => {
+          statusDot.className = 'status-dot';
+          statusText.textContent = 'Bridge Offline';
+        };
+      } catch (e) {
+        setTimeout(connectWS, 4000);
+      }
+    }
+
+    // HTTP polling fallback
+    async function fetchLatestPending() {
+      log('Polling bridge for pending schemas...');
+      try {
+        const res = await fetch(`${BRIDGE_HTTP}/api/figma/pending`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.payload) {
+            log(`Found pending component: ${data.payload.component?.name}!`, 'success');
+            syncPayloadToCanvas(data.payload);
+          } else {
+            log('No pending schemas queued on bridge.');
+          }
+        }
+      } catch (e) {
+        log(`Bridge poll failed: ${e.message}`, 'error');
+      }
+    }
+
+    function syncPayloadToCanvas(payload) {
+      log(`Sending ${payload.component?.name} to Figma canvas engine...`);
+      parent.postMessage({
+        pluginMessage: {
+          type: 'SYNC_PAYLOAD_TO_CANVAS',
+          payload
+        }
+      }, '*');
+    }
+
+    // Listen for canvas execution report from code.js
+    window.onmessage = (event) => {
+      const msg = event.data?.pluginMessage;
+      if (!msg) return;
+
+      if (msg.type === 'FIGMA_SYNC_SUCCESS') {
+        log(`✓ Created ${msg.variantCount} variants of "${msg.componentName}" on Canvas!`, 'success');
+
+        // Send ACK back to bridge server
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'FIGMA_ACK',
+            componentName: msg.componentName,
+            variantCount: msg.variantCount
+          }));
+        }
+        fetch(`${BRIDGE_HTTP}/api/figma/ack`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            componentName: msg.componentName,
+            variantCount: msg.variantCount
+          })
+        }).catch(() => {});
+      } else if (msg.type === 'FIGMA_SYNC_ERROR') {
+        log(`Error: ${msg.error}`, 'error');
+      }
+    };
+
+    // Start WebSocket
+    connectWS();
+
+    // Check polling every 5s as fallback
+    setInterval(() => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        fetch(`${BRIDGE_HTTP}/api/status`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.status === 'ok') {
+              statusDot.className = 'status-dot online';
+              statusText.textContent = 'Bridge HTTP Online';
+            }
+          })
+          .catch(() => {
+            statusDot.className = 'status-dot';
+            statusText.textContent = 'Bridge Offline';
+          });
+      }
+    }, 5000);
+  </script>
+</body>
+</html>
