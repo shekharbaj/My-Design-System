@@ -1,7 +1,7 @@
 // AI Design System Creator - Exact Reference Editor View (Images 1, 3, 5, 6, 7 References)
 import { store } from '../store.js';
 import { ICON_SVGS } from '../components-data.js';
-import { bridgeClient } from '../bridge-client.js';
+import { bridgeClient, getComponentSpecificVariants } from '../bridge-client.js';
 
 export class EditorView {
   constructor(containerEl) {
@@ -36,7 +36,8 @@ export class EditorView {
 
     const propCount = comp.props?.length || 0;
     const anatomyCount = this.countAnatomyNodes(comp.anatomy);
-    const variantsCount = comp.id === 'button' ? 47 : (comp.id === 'filter-chip' ? 1 : 12);
+    const compVariants = getComponentSpecificVariants(comp);
+    const variantsCount = compVariants.length;
 
     this.container.innerHTML = `
       <div class="editor-stage-layout">
@@ -47,50 +48,55 @@ export class EditorView {
           </div>
 
           <div class="editor-stage-top-right">
-            ${comp.id === 'button' ? `
-              <button class="stage-ghost-btn" id="btn-edit-draft">Edit as draft</button>
-              <button class="stage-ghost-btn" id="btn-docs-link">Docs ↗</button>
-            ` : ''}
+            <button class="stage-ghost-btn ${store.isDraft(comp.id) ? 'active-draft' : ''}" id="btn-edit-draft">${store.isDraft(comp.id) ? '● In Drafts' : 'Edit as draft'}</button>
+   <button class="stage-ghost-btn" id="btn-docs-link" title="Open Design System Documentation Site">Docs ↗</button>
           </div>
         </div>
 
         <!-- Sub-tabs Navigation Row (Line 2): Subtabs on Left, Figma/Code/Preview on Extreme Right (Requirement 11) -->
         <div class="editor-subtabs-row">
+          <!-- Subtabs on Left: Preview first, then Properties, Anatomy, Variants (Requirement 21) -->
           <div class="subtabs-left">
+            <button class="subtab-btn ${store.currentSubTab === 'preview' ? 'active' : ''}" data-subtab="preview">
+              Preview
+            </button>
             <button class="subtab-btn ${store.currentSubTab === 'props' ? 'active' : ''}" data-subtab="props">
-              Props (${propCount})
+              Properties (${propCount})
             </button>
             <button class="subtab-btn ${store.currentSubTab === 'anatomy' ? 'active' : ''}" data-subtab="anatomy">
               Anatomy (${anatomyCount})
             </button>
             <button class="subtab-btn ${store.currentSubTab === 'variants' ? 'active' : ''}" data-subtab="variants">
-              Variants ${variantsCount ? `(${variantsCount})` : ''}
+              Variants (${variantsCount})
             </button>
           </div>
 
-          <!-- Extreme Right: Figma, Code, Preview (Requirement 11) -->
+          <!-- Extreme Right: Live Sync Status side by side: Code and Figma (Requirement 19 & 20) -->
           <div class="subtabs-extreme-right">
-            <div class="stage-views-segmented-pill">
-              <button class="stage-view-btn figma-btn-trigger ${this.figmaMenuOpen ? 'active' : ''}" id="btn-stage-figma" title="Sync with Figma Desktop Plugin">
-                Figma
+            <div class="sync-status-side-by-side">
+              <button class="sync-status-pill code-sync ${this.codePanelOpen ? 'active' : ''}" id="btn-stage-code" title="Toggle Code JSON Contract schema">
+                <span class="sync-dot code-ready">●</span>
+                <span class="sync-text">Code: <strong>Ready</strong></span>
               </button>
-              <button class="stage-view-btn ${this.codePanelOpen ? 'active' : ''}" id="btn-stage-code" title="Toggle Code JSON Contract (3rd right column)">
-                Code
-              </button>
-              <button class="stage-view-btn" id="btn-stage-preview" title="Open Interactive Sandbox Preview Popup">
-                Preview
+              <button class="sync-status-pill figma-sync ${store.bridgeStatus.connected ? 'connected' : 'offline'} ${this.figmaMenuOpen ? 'active' : ''}" id="btn-stage-figma" title="Figma Desktop Live Sync Status (Click for push options)">
+                <span class="sync-dot ${store.bridgeStatus.connected ? 'figma-online' : 'figma-offline'}">●</span>
+                <span class="sync-text">Figma: <strong>${store.bridgeStatus.connected ? 'Connected' : 'Offline'}</strong></span>
+                <span class="sync-chevron">▾</span>
               </button>
             </div>
 
             <!-- Anchored Figma Dropdown (Images 5 & 6) -->
             ${this.figmaMenuOpen ? `
               <div class="figma-anchored-dropdown" id="figma-dropdown-menu">
-                <div class="figma-menu-item disabled">
-                  <span class="menu-main-label">Pull from Figma</span>
-                  <span class="menu-sub-label">Not one of the library's components</span>
+                <div class="figma-menu-item active-push" id="btn-menu-push-project-scope" style="background-color: #FAF5FF; border-left: 3px solid #9333EA; cursor: pointer;">
+                  <span class="menu-main-label">⚡ Push All Project Scope (${store.includedComponentIds.size} components)</span>
+                  <span class="menu-sub-label">Sync all ${store.includedComponentIds.size} selected components to Figma canvas</span>
                 </div>
-                <div class="figma-menu-item active-push" id="btn-menu-push-figma">
-                  <span class="menu-main-label">Push to Figma</span>
+                <div class="figma-menu-item" id="btn-menu-push-figma" style="cursor: pointer;">
+                  <span class="menu-main-label">⚡ Push Active Component Only ("${comp.name}")</span>
+                </div>
+                <div class="figma-menu-item" id="btn-menu-copy-figma-json" style="border-top: 1px solid #F1F5F9; cursor: pointer;">
+                  <span class="menu-main-label">📋 Copy Figma Payload (JSON)</span>
                 </div>
               </div>
             ` : ''}
@@ -107,6 +113,331 @@ export class EditorView {
     this.attachListeners(comp);
   }
 
+
+  // =========================================================
+  // SUBTAB: PREVIEW VIEW (Requirement 21: Show Preview First)
+  // =========================================================
+  renderPreviewSubTab(comp) {
+    const activeProps = comp.activeProps || {};
+    const currentState = store.activeState || 'Rest';
+    const compType = this.detectCompType(comp);
+    const renderedHtml = this.generateLiveComponentPreviewHtml(comp, compType, currentState);
+    const tokens = this.getTokensForComponent(comp, compType);
+
+    return `
+      <div class="editor-preview-subtab-layout">
+        <!-- Center Stage Canvas -->
+        <div class="preview-stage-center">
+          <div class="preview-stage-header-bar">
+            <div class="state-pills-cluster">
+              <span class="cluster-label">State:</span>
+              <div class="stage-states-segmented">
+                ${['Rest', 'Hover', 'Focus', 'Press'].map(st => `
+                  <button class="stage-state-pill ${currentState === st ? 'active' : ''}" data-state="${st}">
+                    <span class="st-dot st-${st.toLowerCase()}"></span>
+                    ${st}
+                  </button>
+                `).join('')}
+              </div>
+            </div>
+
+            <div class="preview-stage-meta">
+              <span class="badge-comp-type">${comp.category || 'Component'}</span>
+              <span class="badge-comp-id">${comp.name}</span>
+            </div>
+          </div>
+
+          <!-- Interactive Viewport Canvas -->
+          <div class="preview-interactive-canvas">
+            <div class="canvas-grid-dots"></div>
+            <div class="rendered-component-mount-box">
+              ${renderedHtml}
+            </div>
+          </div>
+
+          <!-- Bottom Design Tokens Strip (Requirement 17: Tokens visible for each item) -->
+          <div class="preview-tokens-footer">
+            <div class="tokens-footer-header">
+              <span class="tokens-sparkle">✦</span>
+              <span class="tokens-footer-title">Active Design Tokens for <strong>${comp.name}</strong></span>
+              <button class="btn-copy-tokens" id="btn-copy-active-tokens">📋 Copy CSS Tokens</button>
+            </div>
+            <div class="tokens-chips-scroll">
+              ${tokens.map(t => `
+                <div class="token-chip" title="${t.desc}">
+                  <span class="token-name">${t.name}</span>
+                  <span class="token-val" style="${t.color ? 'background:' + t.val + '; color: #fff; text-shadow:0 1px 2px rgba(0,0,0,0.4);' : ''}">${t.val}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Props & Interactive Config Panel -->
+        <aside class="preview-controls-aside">
+          <div class="controls-aside-header">
+            <h4>Live Props & Values</h4>
+            <span class="controls-badge">Interactive</span>
+          </div>
+
+          <div class="controls-aside-body">
+            <!-- Label prop -->
+            <div class="control-field-group">
+              <label class="control-label">Label Text</label>
+              <input type="text" id="live-prop-label" class="control-input" value="${activeProps.label || comp.name}" />
+            </div>
+
+            <!-- Size prop -->
+            <div class="control-field-group">
+              <label class="control-label">Size</label>
+              <div class="segmented-option-pills">
+                ${['sm', 'md', 'lg'].map(sz => `
+                  <button class="seg-pill ${(activeProps.size || 'md') === sz ? 'active' : ''}" data-prop="size" data-val="${sz}">${sz.toUpperCase()}</button>
+                `).join('')}
+              </div>
+            </div>
+
+            <!-- Component-specific toggles -->
+            ${compType === 'checkbox' || compType === 'switch' || compType === 'radio' ? `
+              <div class="control-field-group">
+                <label class="control-label">${compType === 'radio' ? 'Selected' : 'Checked'} State</label>
+                <label class="switch-toggle-label">
+                  <input type="checkbox" id="live-prop-checked" ${activeProps.checked !== false ? 'checked' : ''} />
+                  <span>${activeProps.checked !== false ? 'Active (Checked / Selected)' : 'Inactive (Unchecked)'}</span>
+                </label>
+              </div>
+            ` : ''}
+
+            ${compType === 'button' || compType === 'chip' ? `
+              <div class="control-field-group">
+                <label class="control-label">Variant</label>
+                <select id="live-prop-variant" class="control-select">
+                  <option value="primary" ${activeProps.variant === 'primary' ? 'selected' : ''}>Primary Brand</option>
+                  <option value="secondary" ${activeProps.variant === 'secondary' ? 'selected' : ''}>Secondary</option>
+                  <option value="outline" ${activeProps.variant === 'outline' ? 'selected' : ''}>Outline</option>
+                  <option value="ghost" ${activeProps.variant === 'ghost' ? 'selected' : ''}>Ghost</option>
+                  <option value="danger" ${activeProps.variant === 'danger' ? 'selected' : ''}>Danger</option>
+                </select>
+              </div>
+            ` : ''}
+
+            ${compType === 'input' ? `
+              <div class="control-field-group">
+                <label class="control-label">Validation State</label>
+                <select id="live-prop-input-state" class="control-select">
+                  <option value="Default" ${activeProps.state === 'Default' ? 'selected' : ''}>Default</option>
+                  <option value="Focus" ${activeProps.state === 'Focus' ? 'selected' : ''}>Focus</option>
+                  <option value="Filled" ${activeProps.state === 'Filled' ? 'selected' : ''}>Filled</option>
+                  <option value="Error" ${activeProps.state === 'Error' ? 'selected' : ''}>Error</option>
+                  <option value="Disabled" ${activeProps.state === 'Disabled' ? 'selected' : ''}>Disabled</option>
+                </select>
+              </div>
+            ` : ''}
+
+            <!-- Icon Toggle -->
+            <div class="control-field-group">
+              <label class="control-label">Show Leading Icon</label>
+              <label class="switch-toggle-label">
+                <input type="checkbox" id="live-prop-show-icon" ${activeProps.showIcon || activeProps.hasLeftIcon ? 'checked' : ''} />
+                <span>${activeProps.showIcon || activeProps.hasLeftIcon ? 'Icon Visible' : 'No Icon'}</span>
+              </label>
+            </div>
+
+            <!-- Disabled Toggle -->
+            <div class="control-field-group">
+              <label class="control-label">Disabled</label>
+              <label class="switch-toggle-label">
+                <input type="checkbox" id="live-prop-disabled" ${activeProps.disabled ? 'checked' : ''} />
+                <span>${activeProps.disabled ? 'Disabled' : 'Enabled'}</span>
+              </label>
+            </div>
+
+            <!-- Sync to Figma button inside preview -->
+            <div class="preview-actions-block">
+              <button class="adsc-btn btn-primary full-width" id="btn-push-active-from-preview">
+                ⚡ Push "${comp.name}" to Figma
+              </button>
+            </div>
+          </div>
+        </aside>
+      </div>
+    `;
+  }
+
+  detectCompType(comp) {
+    const id = (comp.id || '').toLowerCase();
+    const name = (comp.name || '').toLowerCase();
+    if (id.includes('checkbox') || name.includes('checkbox')) return 'checkbox';
+    if (id.includes('switch') || id.includes('toggle') || name.includes('switch')) return 'switch';
+    if (id.includes('radio') || name.includes('radio')) return 'radio';
+    if (id.includes('input') || id.includes('textarea') || name.includes('input')) return 'input';
+    if (id.includes('modal') || id.includes('dialog') || name.includes('modal')) return 'modal';
+    if (id.includes('table') || name.includes('table')) return 'table';
+    if (id.includes('avatar') || name.includes('avatar')) return 'avatar';
+    if (id.includes('badge') || name.includes('badge')) return 'badge';
+    if (id.includes('tab') || name.includes('tab')) return 'tab';
+    if (id.includes('toast') || id.includes('notification')) return 'toast';
+    if (id.includes('card') || name.includes('card')) return 'card';
+    if (id.includes('chip') || name.includes('chip')) return 'chip';
+    if (id.includes('dropdown') || id.includes('select') || id.includes('menu')) return 'dropdown';
+    return 'button';
+  }
+
+  generateLiveComponentPreviewHtml(comp, compType, state) {
+    const p = comp.activeProps || {};
+    const label = p.label || comp.name;
+    const isHover = state === 'Hover';
+    const isFocus = state === 'Focus';
+    const isPress = state === 'Press';
+    const isDisabled = p.disabled || state === 'Disabled';
+
+    if (compType === 'checkbox') {
+      const isChecked = p.checked !== false;
+      return `
+        <div class="live-comp-checkbox" style="display:inline-flex; align-items:center; gap:10px; cursor:pointer;">
+          <div style="width:22px; height:22px; border-radius:5px; background:${isChecked ? (isHover ? '#9A3412' : '#C2410C') : '#FFFFFF'}; border:1.5px solid ${isChecked ? (isHover ? '#9A3412' : '#C2410C') : (isHover ? '#9CA3AF' : '#D1D5DB')}; display:flex; align-items:center; justify-content:center; color:#fff; box-shadow:${isFocus ? '0 0 0 3px rgba(194,65,12,0.25)' : 'none'};">
+            ${isChecked ? '✓' : ''}
+          </div>
+          <span style="font-size:15px; font-weight:500; color:${isDisabled ? '#9CA3AF' : '#1F2937'};">${label}</span>
+        </div>
+      `;
+    }
+
+    if (compType === 'switch') {
+      const isChecked = p.checked !== false;
+      return `
+        <div class="live-comp-switch" style="display:inline-flex; align-items:center; gap:12px; cursor:pointer;">
+          <div style="width:48px; height:26px; border-radius:999px; background:${isChecked ? (isHover ? '#9A3412' : '#C2410C') : '#D1D5DB'}; padding:2px; display:flex; align-items:center; justify-content:${isChecked ? 'flex-end' : 'flex-start'}; box-shadow:${isFocus ? '0 0 0 3px rgba(194,65,12,0.25)' : 'none'}; transition:all 0.2s;">
+            <div style="width:22px; height:22px; border-radius:50%; background:#FFFFFF; box-shadow:0 1px 3px rgba(0,0,0,0.25);"></div>
+          </div>
+          <span style="font-size:15px; font-weight:500; color:${isDisabled ? '#9CA3AF' : '#1F2937'};">${label}</span>
+        </div>
+      `;
+    }
+
+    if (compType === 'radio') {
+      const isSelected = p.checked !== false;
+      return `
+        <div class="live-comp-radio" style="display:inline-flex; align-items:center; gap:10px; cursor:pointer;">
+          <div style="width:22px; height:22px; border-radius:50%; background:#FFFFFF; border:2px solid ${isSelected ? (isHover ? '#9A3412' : '#C2410C') : (isHover ? '#9CA3AF' : '#D1D5DB')}; display:flex; align-items:center; justify-content:center; box-shadow:${isFocus ? '0 0 0 3px rgba(194,65,12,0.25)' : 'none'};">
+            ${isSelected ? '<div style="width:10px; height:10px; border-radius:50%; background:#C2410C;"></div>' : ''}
+          </div>
+          <span style="font-size:15px; font-weight:500; color:${isDisabled ? '#9CA3AF' : '#1F2937'};">${label}</span>
+        </div>
+      `;
+    }
+
+    if (compType === 'input') {
+      return `
+        <div class="live-comp-input" style="display:flex; flex-direction:column; gap:6px; width:280px;">
+          <label style="font-size:12px; font-weight:600; color:#4B5563;">${label}</label>
+          <div style="display:flex; align-items:center; justify-content:space-between; padding:9px 14px; border-radius:6px; background:#FFFFFF; border:1px solid ${isFocus ? '#C2410C' : '#D1D5DB'}; box-shadow:${isFocus ? '0 0 0 3px rgba(194,65,12,0.2)' : 'none'};">
+            <span style="color:#6B7280; font-size:14px;">Enter value...</span>
+            <span style="opacity:0.6;">✎</span>
+          </div>
+        </div>
+      `;
+    }
+
+    if (compType === 'modal') {
+      return `
+        <div class="live-comp-modal" style="width:320px; border-radius:12px; background:#FFFFFF; border:1px solid #E5E7EB; box-shadow:0 20px 25px -5px rgba(0,0,0,0.15); padding:18px; display:flex; flex-direction:column; gap:12px;">
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <strong style="font-size:16px; color:#111827;">${label}</strong>
+            <span style="cursor:pointer; opacity:0.6;">✕</span>
+          </div>
+          <p style="font-size:13px; color:#6B7280; line-height:1.5;">${comp.description || 'Dialog modal with confirm and cancel workflows.'}</p>
+          <div style="display:flex; justify-content:flex-end; gap:8px; padding-top:6px;">
+            <button style="padding:6px 12px; border-radius:6px; border:1px solid #D1D5DB; background:#fff; font-size:13px; cursor:pointer;">Cancel</button>
+            <button style="padding:6px 16px; border-radius:6px; border:none; background:#C2410C; color:#fff; font-size:13px; font-weight:600; cursor:pointer;">Confirm</button>
+          </div>
+        </div>
+      `;
+    }
+
+    if (compType === 'table') {
+      return `
+        <div class="live-comp-table" style="width:340px; border-radius:8px; border:1px solid #E5E7EB; overflow:hidden; background:#fff; box-shadow:0 2px 4px rgba(0,0,0,0.04);">
+          <div style="display:flex; background:#F9FAFB; padding:8px 14px; font-size:12px; font-weight:600; color:#4B5563; border-bottom:1px solid #E5E7EB;">
+            <div style="flex:1;">Name</div>
+            <div style="flex:1;">Role</div>
+            <div style="flex:1; text-align:right;">Status</div>
+          </div>
+          <div style="display:flex; padding:10px 14px; font-size:13px; color:#1F2937; border-bottom:1px solid #F3F4F6;">
+            <div style="flex:1; font-weight:500;">Design Token</div>
+            <div style="flex:1; color:#6B7280;">Foundation</div>
+            <div style="flex:1; text-align:right; color:#15803D;">Active</div>
+          </div>
+          <div style="display:flex; padding:10px 14px; font-size:13px; color:#1F2937;">
+            <div style="flex:1; font-weight:500;">Component</div>
+            <div style="flex:1; color:#6B7280;">Contract</div>
+            <div style="flex:1; text-align:right; color:#15803D;">Active</div>
+          </div>
+        </div>
+      `;
+    }
+
+    if (compType === 'avatar') {
+      return `
+        <div class="live-comp-avatar" style="position:relative; width:48px; height:48px; border-radius:50%; background:#C2410C; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:16px; border:2px solid #fff; box-shadow:0 2px 6px rgba(0,0,0,0.15);">
+          AJ
+          <span style="position:absolute; bottom:0; right:0; width:12px; height:12px; border-radius:50%; background:#10B981; border:2px solid #fff;"></span>
+        </div>
+      `;
+    }
+
+    if (compType === 'badge') {
+      return `
+        <span class="live-comp-badge" style="display:inline-flex; align-items:center; padding:4px 12px; border-radius:999px; background:#FFEDD5; color:#9A3412; border:1px solid #FDBA74; font-weight:600; font-size:12px;">
+          ${label}
+        </span>
+      `;
+    }
+
+    if (compType === 'tab') {
+      return `
+        <div class="live-comp-tab" style="display:flex; gap:16px; border-bottom:2px solid #E5E7EB; padding-bottom:2px;">
+          <div style="padding:8px 4px; font-weight:600; color:#C2410C; border-bottom:2px solid #C2410C; cursor:pointer;">${label}</div>
+          <div style="padding:8px 4px; font-weight:500; color:#6B7280; cursor:pointer;">Inactive Tab</div>
+        </div>
+      `;
+    }
+
+    if (compType === 'toast') {
+      return `
+        <div class="live-comp-toast" style="display:flex; align-items:center; justify-content:space-between; gap:12px; width:300px; padding:10px 14px; border-radius:8px; background:#EFF6FF; border:1px solid #BFDBFE; color:#1D4ED8; box-shadow:0 4px 6px rgba(0,0,0,0.06);">
+          <span>ℹ ${label}</span>
+          <span style="cursor:pointer; opacity:0.7;">✕</span>
+        </div>
+      `;
+    }
+
+    // Default button / chip
+    const bg = p.variant === 'secondary' ? (isHover ? '#E5E7EB' : '#F3F4F6') : (isHover ? '#9A3412' : '#C2410C');
+    const color = p.variant === 'secondary' ? '#1F2937' : '#FFFFFF';
+    const border = p.variant === 'secondary' ? '#E5E7EB' : (isHover ? '#9A3412' : '#C2410C');
+    const shadow = isFocus ? '0 0 0 3px rgba(194,65,12,0.35)' : (isPress ? 'inset 0 2px 4px rgba(0,0,0,0.2)' : 'none');
+
+    return `
+      <button class="live-comp-button" style="display:inline-flex; align-items:center; gap:8px; padding:10px 20px; border-radius:8px; background:${bg}; color:${color}; border:1px solid ${border}; box-shadow:${shadow}; font-size:14px; font-weight:600; cursor:pointer;">
+        ${p.showIcon || p.hasLeftIcon ? '<span>✦</span>' : ''}
+        <span>${label}</span>
+      </button>
+    `;
+  }
+
+  getTokensForComponent(comp, compType) {
+    return [
+      { name: '--color-surface', val: compType === 'button' ? '#C2410C' : '#FFFFFF', color: true, desc: 'Background token' },
+      { name: '--color-text', val: compType === 'button' ? '#FFFFFF' : '#1F2937', color: true, desc: 'Foreground text token' },
+      { name: '--color-border', val: '#D1D5DB', color: true, desc: 'Border token' },
+      { name: '--radius-component', val: compType === 'chip' ? '999px' : '8px', desc: 'Corner radius token' },
+      { name: '--spacing-padding-y', val: '8px', desc: 'Vertical padding token' },
+      { name: '--spacing-padding-x', val: '14px', desc: 'Horizontal padding token' },
+      { name: '--font-size-base', val: '14px', desc: 'Typography font size' }
+    ];
+  }
+
   countAnatomyNodes(node) {
     if (!node) return 0;
     let count = 1;
@@ -117,14 +448,16 @@ export class EditorView {
   }
 
   renderSubTabContent(comp) {
-    if (store.currentSubTab === 'props') {
+    if (store.currentSubTab === 'preview') {
+      return this.renderPreviewSubTab(comp);
+    } else if (store.currentSubTab === 'props') {
       return this.renderPropsView(comp);
     } else if (store.currentSubTab === 'anatomy') {
       return this.renderAnatomyView(comp);
     } else if (store.currentSubTab === 'variants') {
       return this.renderVariantsView(comp);
     }
-    return '';
+    return this.renderPreviewSubTab(comp);
   }
 
   // =========================================================
@@ -233,8 +566,7 @@ export class EditorView {
           <aside class="anatomy-json-panel props-code-panel">
             <div class="json-panel-header">
               <div class="json-subtabs-pill">
-                <button class="json-tab-btn active">JSON</button>
-                <button class="json-tab-btn" id="btn-preview-from-json">Preview</button>
+                <button class="json-tab-btn active">JSON Contract</button>
               </div>
 
               <div class="json-action-buttons">
@@ -276,6 +608,10 @@ export class EditorView {
           <div class="prop-card-mid">
             <span class="prop-kind-type">${this.formatKindLabel(p.kind)}</span>
             <span class="prop-card-val">${displayVal}</span>
+            <span class="prop-token-pill" title="Bound Design System Token">
+              <span class="token-sparkle">✦</span>
+              <span>${this.getPropTokenString(p, comp)}</span>
+            </span>
           </div>
 
           <div class="prop-card-right">
@@ -344,6 +680,16 @@ export class EditorView {
     return String(val !== undefined ? val : '');
   }
 
+  getPropTokenString(p, comp) {
+    if (p.id === 'state' || p.kind === 'state') return 'token: states/4-mode';
+    if (p.id === 'showIcon' || p.name === 'Show icon') return 'token: bool/show-icon';
+    if (p.id === 'icon' || p.name === 'Icon') return 'token: icon/circle-alert';
+    if (p.id === 'label' || p.name === 'Label') return 'token: typography/label-md';
+    if (p.id === 'variant') return 'token: color/variant-primary';
+    if (p.id === 'size') return 'token: size/control-scale';
+    return `token: ${p.id}`;
+  }
+
   // =========================================================
   // SUBTAB 2: ANATOMY VIEW (Middle Column Covers Max Area - Requirement 8)
   // =========================================================
@@ -390,6 +736,10 @@ export class EditorView {
               </div>
               <div class="card-mid">
                 <span class="node-type">${comp.anatomy?.type || 'Container'}</span>
+                <span class="anatomy-token-tag" title="Layout tokens">
+                  <span class="token-sparkle">✦</span>
+                  <span>Tokens: Spacing/4 (4px) • Padding: 8px, 12px • Corner: 999</span>
+                </span>
               </div>
               <div class="card-right">
                 <span class="node-menu-dots">⋯</span>
@@ -406,6 +756,10 @@ export class EditorView {
               </div>
               <div class="card-mid">
                 <span class="node-type">Instance</span>
+                <span class="anatomy-token-tag" title="Instance token">
+                  <span class="token-sparkle">✦</span>
+                  <span>Token: icon/circle-alert</span>
+                </span>
               </div>
               <div class="card-right">
                 <span class="node-menu-dots">⋯</span>
@@ -422,6 +776,10 @@ export class EditorView {
               </div>
               <div class="card-mid">
                 <span class="node-type">Text</span>
+                <span class="anatomy-token-tag" title="Typography token">
+                  <span class="token-sparkle">✦</span>
+                  <span>Token: typography/label-md (14px)</span>
+                </span>
               </div>
               <div class="card-right">
                 <span class="node-menu-dots">⋯</span>
@@ -436,7 +794,7 @@ export class EditorView {
             <div class="json-panel-header">
               <div class="json-subtabs-pill">
                 <button class="json-tab-btn active">JSON</button>
-                <button class="json-tab-btn" id="btn-preview-from-anatomy-json">Preview</button>
+                
               </div>
 
               <div class="json-action-buttons">
@@ -508,184 +866,175 @@ export class EditorView {
   }
 
   // =========================================================
-  // SUBTAB 3: VARIANTS MATRIX VIEW (Image 7 Reference)
-  // =========================================================
+  // SUBTAB: VARIANTS VIEW (Requirement 21: Related to that component only)
   renderVariantsView(comp) {
-    const sizes = ['lg', 'md', 'sm'];
-    const variants = [
-      { name: 'Primary', tones: ['Neutral', 'Danger'] },
-      { name: 'Secondary', tones: ['Neutral', 'Danger'] },
-      { name: 'Tertiary', tones: ['Neutral', 'Danger'] }
-    ];
-    const states = ['Rest', 'Focus', 'Hover', 'Press', 'Loading'];
+    const variants = getComponentSpecificVariants(comp);
+    const compType = this.detectCompType(comp);
 
     return `
-      <div class="variants-full-matrix-layout">
-        <!-- Left: Full Multi-Dimensional Variant Matrix -->
-        <main class="variants-matrix-main">
-          <div class="matrix-summary-header">
-            <h3 class="combinations-title">360 combinations (144 not drawn)</h3>
-            <p class="combinations-subtitle">◆ 116 where values change each other</p>
+      <div class="variants-component-specific-layout">
+        <div class="variants-header-bar">
+          <div class="variants-title-block">
+            <h3>${comp.name} Variants Matrix (${variants.length} defined)</h3>
+            <p>Every variant matches ${comp.name} properties, states and anatomy.</p>
           </div>
+          <button class="adsc-btn btn-primary" id="btn-push-all-variants-figma">
+            ⚡ Push All ${variants.length} Variants to Figma
+          </button>
+        </div>
 
-          <div class="matrix-table-scroll-wrap">
-            <table class="reference-matrix-table">
-              <thead>
-                <!-- Super-header: Disabled off vs Disabled on -->
-                <tr>
-                  <th class="th-stub" colspan="4"></th>
-                  <th class="th-super-group" colspan="5">Disabled off</th>
-                  <th class="th-super-group" colspan="5">Disabled on</th>
-                </tr>
-                <!-- Sub-header: States -->
-                <tr>
-                  <th class="th-stub" colspan="4"></th>
-                  ${states.map(st => `<th class="th-state-col ${st === 'Focus' ? 'highlight-focus' : ''}">${st}</th>`).join('')}
-                  ${states.map(st => `<th class="th-state-col disabled-mode">${st}</th>`).join('')}
-                </tr>
-              </thead>
-              <tbody>
-                <!-- Group 1: Show icon off -->
-                ${this.renderMatrixIconGroup(comp, false, sizes, variants, states)}
-                <!-- Group 2: Show icon on -->
-                ${this.renderMatrixIconGroup(comp, true, sizes, variants, states)}
-              </tbody>
-            </table>
-          </div>
-        </main>
-
-        <!-- Right: Inspection Drawer (Image 7) -->
-        <aside class="variants-inspection-drawer">
-          <div class="drawer-header-title">
-            <h4>Size is ${this.selectedMatrixCell.size}, State is ${this.selectedMatrixCell.state}</h4>
-          </div>
-
-          <table class="inspection-delta-table">
-            <thead>
-              <tr>
-                <th>Part</th>
-                <th>Default</th>
-                <th>Here</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td class="part-name">Focus ring</td>
-                <td class="val-default">Absent</td>
-                <td class="val-here ${this.selectedMatrixCell.state === 'Focus' ? 'is-green' : ''}">
-                  ${this.selectedMatrixCell.state === 'Focus' ? 'Present' : 'Absent'}
-                </td>
-              </tr>
-              <tr>
-                <td class="part-name">Content layout</td>
-                <td class="val-default">Gap 8 8<br>Padding 12</td>
-                <td class="val-here">
-                  ${this.selectedMatrixCell.size === 'sm' ? 'Gap 4 4<br>Padding 8' : (this.selectedMatrixCell.size === 'lg' ? 'Gap 10 10<br>Padding 16' : 'Gap 8 8<br>Padding 12')}
-                </td>
-              </tr>
-              <tr>
-                <td class="part-name">Content minHeight</td>
-                <td class="val-default">44</td>
-                <td class="val-here">
-                  ${this.selectedMatrixCell.size === 'sm' ? '36' : (this.selectedMatrixCell.size === 'lg' ? '48' : '44')}
-                </td>
-              </tr>
-              <tr>
-                <td class="part-name">Label text style</td>
-                <td class="val-default">md-medium</td>
-                <td class="val-here">
-                  ${this.selectedMatrixCell.size === 'sm' ? 'sm-medium' : (this.selectedMatrixCell.size === 'lg' ? 'lg-medium' : 'md-medium')}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </aside>
+        <div class="variants-grid-cards">
+          ${variants.map((v, i) => {
+            const previewCell = this.generateLiveComponentPreviewHtml(
+              { ...comp, activeProps: { ...comp.activeProps, ...v.properties } },
+              compType,
+              v.properties?.state || 'Rest'
+            );
+            return `
+              <div class="variant-matrix-card">
+                <div class="card-top-header">
+                  <span class="variant-num">#${i + 1}</span>
+                  <span class="variant-name-title">${v.name}</span>
+                </div>
+                <div class="card-rendered-preview">
+                  ${previewCell}
+                </div>
+                <div class="card-props-chips">
+                  ${Object.entries(v.properties || {}).filter(([k]) => k !== 'compType' && !k.startsWith('_')).map(([k, val]) => `
+                    <span class="v-prop-chip"><strong>${k}:</strong> ${val}</span>
+                  `).join('')}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
       </div>
     `;
-  }
-
-  renderMatrixIconGroup(comp, showIcon, sizes, variants, states) {
-    const totalGroupRows = sizes.length * variants.reduce((acc, v) => acc + v.tones.length, 0);
-    let isFirstRowOfIconGroup = true;
-
-    return sizes.map((sz) => {
-      const sizeRowSpan = variants.reduce((acc, v) => acc + v.tones.length, 0);
-      let isFirstRowOfSize = true;
-
-      return variants.map((v) => {
-        const variantRowSpan = v.tones.length;
-        let isFirstRowOfVariant = true;
-
-        return v.tones.map((tone) => {
-          const rowHtml = `
-            <tr class="matrix-data-row">
-              ${isFirstRowOfIconGroup ? `
-                <th class="th-icon-group" rowspan="${totalGroupRows}">
-                  ${showIcon ? 'Show icon on' : 'Show icon off'}
-                </th>
-              ` : ''}
-
-              ${isFirstRowOfSize ? `
-                <th class="th-size-group" rowspan="${sizeRowSpan}">
-                  ${sz}
-                </th>
-              ` : ''}
-
-              ${isFirstRowOfVariant ? `
-                <th class="th-variant-group" rowspan="${variantRowSpan}">
-                  ${v.name}
-                </th>
-              ` : ''}
-
-              <th class="th-tone-group">
-                ${tone}
-              </th>
-
-              <!-- Cells for Disabled OFF -->
-              ${states.map(st => {
-                const isSelected = this.selectedMatrixCell.size === sz &&
-                  this.selectedMatrixCell.variant === v.name &&
-                  this.selectedMatrixCell.tone === tone &&
-                  this.selectedMatrixCell.state === st &&
-                  this.selectedMatrixCell.disabled === false &&
-                  this.selectedMatrixCell.showIcon === showIcon;
-
-                const marker = (st === 'Loading' && tone === 'Danger') ? '✕' : (st === 'Focus' || v.name === 'Primary' ? '◆' : '●');
-
-                return `
-                  <td class="cell-marker ${isSelected ? 'is-selected-cell' : ''}" 
-                      data-sz="${sz}" data-var="${v.name}" data-tone="${tone}" data-st="${st}" data-dis="false" data-icon="${showIcon}">
-                    ${isSelected ? '<span class="selected-cell-ring"></span>' : ''}
-                    <span class="marker-glyph marker-${marker === '◆' ? 'diamond' : (marker === '●' ? 'dot' : 'cross')}">${marker}</span>
-                  </td>
-                `;
-              }).join('')}
-
-              <!-- Cells for Disabled ON -->
-              ${states.map(st => {
-                return `
-                  <td class="cell-marker disabled-mode" data-sz="${sz}" data-var="${v.name}" data-tone="${tone}" data-st="${st}" data-dis="true" data-icon="${showIcon}">
-                    <span class="marker-glyph marker-cross">✕</span>
-                  </td>
-                `;
-              }).join('')}
-            </tr>
-          `;
-
-          isFirstRowOfIconGroup = false;
-          isFirstRowOfSize = false;
-          isFirstRowOfVariant = false;
-
-          return rowHtml;
-        }).join('');
-      }).join('');
-    }).join('');
   }
 
   // =========================================================
   // LISTENERS & INTERACTIONS
   // =========================================================
   attachListeners(comp) {
+
+    // Edit as Draft toggle (Requirement 24)
+    const editDraftBtn = this.container.querySelector('#btn-edit-draft');
+    if (editDraftBtn) {
+      editDraftBtn.addEventListener('click', () => {
+        if (store.isDraft(comp.id)) {
+          store.removeDraft(comp.id);
+          bridgeClient.notifyUser(`Removed "${comp.name}" from drafts`, 'info');
+        } else {
+          store.addDraft(comp);
+          bridgeClient.notifyUser(`Added "${comp.name}" to unpublished drafts`, 'success');
+        }
+        this.render();
+      });
+    }
+
+    // Docs link navigation (Requirement 25)
+    const docsLinkBtn = this.container.querySelector('#btn-docs-link');
+    if (docsLinkBtn) {
+      docsLinkBtn.addEventListener('click', () => {
+        store.setView('docs');
+      });
+    }
+
+    // Interactive State Pills in Preview Subtab
+    const statePills = this.container.querySelectorAll('.stage-state-pill');
+    statePills.forEach(pill => {
+      pill.addEventListener('click', () => {
+        const st = pill.getAttribute('data-state');
+        store.setActiveState(st);
+        this.render();
+      });
+    });
+
+    // Live Prop Controls in Preview Subtab
+    const liveLabelInput = this.container.querySelector('#live-prop-label');
+    if (liveLabelInput) {
+      liveLabelInput.addEventListener('input', (e) => {
+        store.updateActiveProp('label', e.target.value);
+      });
+    }
+
+    const liveSizePills = this.container.querySelectorAll('.segmented-option-pills .seg-pill');
+    liveSizePills.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const sz = btn.getAttribute('data-val');
+        store.updateActiveProp('size', sz);
+        this.render();
+      });
+    });
+
+    const liveCheckedInput = this.container.querySelector('#live-prop-checked');
+    if (liveCheckedInput) {
+      liveCheckedInput.addEventListener('change', (e) => {
+        store.updateActiveProp('checked', e.target.checked);
+        this.render();
+      });
+    }
+
+    const liveVariantSelect = this.container.querySelector('#live-prop-variant');
+    if (liveVariantSelect) {
+      liveVariantSelect.addEventListener('change', (e) => {
+        store.updateActiveProp('variant', e.target.value);
+        this.render();
+      });
+    }
+
+    const liveInputState = this.container.querySelector('#live-prop-input-state');
+    if (liveInputState) {
+      liveInputState.addEventListener('change', (e) => {
+        store.updateActiveProp('state', e.target.value);
+        this.render();
+      });
+    }
+
+    const liveIconInput = this.container.querySelector('#live-prop-show-icon');
+    if (liveIconInput) {
+      liveIconInput.addEventListener('change', (e) => {
+        store.updateActiveProp('showIcon', e.target.checked);
+        store.updateActiveProp('hasLeftIcon', e.target.checked);
+        this.render();
+      });
+    }
+
+    const liveDisabledInput = this.container.querySelector('#live-prop-disabled');
+    if (liveDisabledInput) {
+      liveDisabledInput.addEventListener('change', (e) => {
+        store.updateActiveProp('disabled', e.target.checked);
+        this.render();
+      });
+    }
+
+    const pushFromPreviewBtn = this.container.querySelector('#btn-push-active-from-preview');
+    if (pushFromPreviewBtn) {
+      pushFromPreviewBtn.addEventListener('click', async () => {
+        await bridgeClient.pushComponent(comp);
+      });
+    }
+
+    const pushAllVariantsBtn = this.container.querySelector('#btn-push-all-variants-figma');
+    if (pushAllVariantsBtn) {
+      pushAllVariantsBtn.addEventListener('click', async () => {
+        await bridgeClient.pushComponent(comp);
+      });
+    }
+
+    const copyTokensBtn = this.container.querySelector('#btn-copy-active-tokens');
+    if (copyTokensBtn) {
+      copyTokensBtn.addEventListener('click', () => {
+        const compType = this.detectCompType(comp);
+        const tokens = this.getTokensForComponent(comp, compType);
+        const cssStr = tokens.map(t => `  ${t.name}: ${t.val}; /* ${t.desc} */`).join('\n');
+        navigator.clipboard.writeText(`:root {\n${cssStr}\n}`).then(() => {
+          copyTokensBtn.textContent = '✓ Copied CSS!';
+          setTimeout(() => { copyTokensBtn.textContent = '📋 Copy CSS Tokens'; }, 1800);
+        });
+      });
+    }
+
     // Title rename input
     const nameInput = this.container.querySelector('#component-name-input');
     if (nameInput) {
@@ -779,13 +1128,38 @@ export class EditorView {
       });
     }
 
-    // Push to Figma action inside dropdown
+    // Push all project scope components action inside dropdown
+    const pushScopeMenuBtn = this.container.querySelector('#btn-menu-push-project-scope');
+    if (pushScopeMenuBtn) {
+      pushScopeMenuBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        this.figmaMenuOpen = false;
+        await bridgeClient.pushProjectScopeComponents();
+        this.render();
+      });
+    }
+
+    // Push active component to Figma action inside dropdown
     const pushMenuBtn = this.container.querySelector('#btn-menu-push-figma');
     if (pushMenuBtn) {
       pushMenuBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
         this.figmaMenuOpen = false;
-        await bridgeClient.pushComponent();
+        await bridgeClient.pushComponent(comp);
+        this.render();
+      });
+    }
+
+    // Copy Figma Payload action
+    const copyFigmaBtn = this.container.querySelector('#btn-menu-copy-figma-json');
+    if (copyFigmaBtn) {
+      copyFigmaBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.figmaMenuOpen = false;
+        const payload = bridgeClient.generateFigmaSyncPayload(comp);
+        navigator.clipboard.writeText(JSON.stringify(payload, null, 2)).then(() => {
+          bridgeClient.notifyUser('Copied Figma payload! You can paste it into the Figma Plugin "Paste JSON" tab.', 'success');
+        });
         this.render();
       });
     }

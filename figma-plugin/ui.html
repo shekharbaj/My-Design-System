@@ -10,7 +10,7 @@
       font-size: 12px;
       color: #1E293B;
       background-color: #FFFFFF;
-      padding: 16px;
+      padding: 14px;
       display: flex;
       flex-direction: column;
       height: 100vh;
@@ -20,11 +20,11 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 10px 12px;
+      padding: 8px 12px;
       background-color: #F8FAFC;
       border: 1px solid #E2E8F0;
       border-radius: 8px;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
     }
     .status-left {
       display: flex;
@@ -32,14 +32,15 @@
       gap: 8px;
     }
     .status-dot {
-      width: 8px;
-      height: 8px;
+      width: 9px;
+      height: 9px;
       border-radius: 50%;
       background-color: #EF4444;
+      transition: all 0.2s ease;
     }
     .status-dot.online {
       background-color: #10B981;
-      box-shadow: 0 0 8px #10B981;
+      box-shadow: 0 0 8px rgba(16, 185, 129, 0.7);
     }
     .status-text {
       font-size: 11px;
@@ -53,19 +54,69 @@
       padding: 2px 6px;
       border-radius: 4px;
       font-weight: 600;
+      cursor: pointer;
     }
+    .port-tag:hover {
+      background-color: #DBEAFE;
+    }
+    .reconnect-btn {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 12px;
+      padding: 2px;
+      border-radius: 4px;
+      color: #64748B;
+      transition: all 0.15s ease;
+    }
+    .reconnect-btn:hover {
+      background-color: #E2E8F0;
+      color: #0F172A;
+    }
+    /* Tabs */
+    .plugin-nav-tabs {
+      display: flex;
+      border-bottom: 1px solid #E2E8F0;
+      margin-bottom: 10px;
+    }
+    .plugin-tab-btn {
+      flex: 1;
+      padding: 8px 0;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      font-size: 11px;
+      font-weight: 600;
+      color: #64748B;
+      cursor: pointer;
+      text-align: center;
+    }
+    .plugin-tab-btn.active {
+      color: #9333EA;
+      border-bottom-color: #9333EA;
+    }
+    .tab-content {
+      display: none;
+      flex: 1;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .tab-content.active {
+      display: flex;
+    }
+    /* Controls */
     .controls-group {
       display: flex;
       flex-direction: column;
       gap: 8px;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
     }
     .toggle-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      font-size: 12px;
-      padding: 4px 0;
+      font-size: 11px;
+      padding: 2px 0;
     }
     .btn {
       display: flex;
@@ -73,7 +124,7 @@
       justify-content: center;
       gap: 6px;
       width: 100%;
-      padding: 9px;
+      padding: 8px 12px;
       border-radius: 6px;
       font-size: 12px;
       font-weight: 600;
@@ -82,11 +133,11 @@
       transition: all 0.15s ease;
     }
     .btn-primary {
-      background-color: #A259FF;
+      background-color: #9333EA;
       color: #FFFFFF;
     }
     .btn-primary:hover {
-      background-color: #8B3DFF;
+      background-color: #7E22CE;
     }
     .btn-secondary {
       background-color: #F1F5F9;
@@ -101,8 +152,8 @@
       background-color: #0F172A;
       color: #F8FAFC;
       border-radius: 6px;
-      padding: 8px;
-      font-family: monospace;
+      padding: 8px 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
       font-size: 10px;
       overflow-y: auto;
       display: flex;
@@ -113,6 +164,25 @@
     .log-time { color: #64748B; margin-right: 4px; }
     .log-success { color: #10B981; }
     .log-error { color: #EF4444; }
+    .log-info { color: #38BDF8; }
+    .log-warning { color: #F59E0B; }
+    /* Manual paste area */
+    .json-textarea {
+      flex: 1;
+      width: 100%;
+      border: 1px solid #CBD5E1;
+      border-radius: 6px;
+      padding: 8px;
+      font-family: monospace;
+      font-size: 10px;
+      resize: none;
+      margin-bottom: 8px;
+    }
+    .json-textarea:focus {
+      outline: none;
+      border-color: #9333EA;
+      box-shadow: 0 0 0 2px rgba(147, 51, 234, 0.2);
+    }
     .footer-note {
       margin-top: 8px;
       font-size: 10px;
@@ -125,73 +195,314 @@
   <div class="header-card">
     <div class="status-left">
       <div class="status-dot" id="status-dot"></div>
-      <span class="status-text" id="status-text">Disconnected</span>
+      <span class="status-text" id="status-text">Connecting...</span>
     </div>
-    <span class="port-tag">localhost:9250</span>
+    <div style="display: flex; align-items: center; gap: 6px;">
+      <span class="port-tag" id="port-tag" title="Click to manually enter host:port">127.0.0.1:9250</span>
+      <button class="reconnect-btn" id="btn-reconnect" title="Scan & Reconnect">🔄</button>
+    </div>
   </div>
 
-  <div class="controls-group">
-    <div class="toggle-row">
-      <label for="auto-sync-check"><strong>Live Auto-Sync:</strong></label>
-      <input type="checkbox" id="auto-sync-check" checked />
+  <div class="plugin-nav-tabs">
+    <button class="plugin-tab-btn active" id="tab-btn-live">⚡ Live Bridge</button>
+    <button class="plugin-tab-btn" id="tab-btn-manual">📋 Paste JSON</button>
+  </div>
+
+  <!-- TAB 1: Live Sync -->
+  <div class="tab-content active" id="tab-content-live">
+    <div class="controls-group">
+      <div class="toggle-row">
+        <label for="auto-sync-check"><strong>Auto-Sync Incoming:</strong></label>
+        <input type="checkbox" id="auto-sync-check" checked />
+      </div>
+
+      <button class="btn btn-primary" id="btn-pull-now">
+        ⚡ Pull Latest from Web App
+      </button>
     </div>
 
-    <button class="btn btn-primary" id="btn-pull-now">
-      Pull Latest Components from Bridge
+    <div class="log-panel" id="log-terminal"></div>
+  </div>
+
+  <!-- TAB 2: Manual Paste -->
+  <div class="tab-content" id="tab-content-manual">
+    <p style="font-size: 11px; color: #64748B; margin-bottom: 6px;">
+      Paste component contract JSON or token schema below:
+    </p>
+    <textarea class="json-textarea" id="manual-json-input" placeholder='{"contract": 1, "component": "Filter chip", ...}'></textarea>
+    <button class="btn btn-primary" id="btn-manual-sync">
+      🚀 Generate on Canvas Now
     </button>
   </div>
 
-  <div class="log-panel" id="log-terminal">
-    <div class="log-row">
-      <span class="log-time">[Init]</span>
-      <span>Connecting to localhost:9250...</span>
-    </div>
-  </div>
-
   <div class="footer-note">
-    AI Design System Creator &bull; Figma Desktop Sync v1.0
+    AI Design System Creator &bull; Figma Desktop Sync v2.0
   </div>
 
   <script>
+    // 0. Global Error Catcher - ensures any uncaught error is logged visually
+    window.onerror = function(msg, url, line, col, err) {
+      const terminal = document.getElementById('log-terminal');
+      if (terminal) {
+        const row = document.createElement('div');
+        row.className = 'log-row log-error';
+        const time = new Date().toLocaleTimeString();
+        row.innerHTML = `<span class="log-time">[${time}]</span> <span>[Error] Line ${line}: ${msg}</span>`;
+        terminal.appendChild(row);
+      }
+      return false;
+    };
+
+    // Safe storage helper with in-memory fallback (prevents iframe SecurityError)
+    const _memStore = {};
+    function safeGet(key, defVal) {
+      try {
+        if (window.localStorage) {
+          const v = window.localStorage.getItem(key);
+          if (v !== null) return v;
+        }
+      } catch (e) {}
+      return _memStore[key] !== undefined ? _memStore[key] : defVal;
+    }
+    function safeSet(key, val) {
+      try {
+        if (window.localStorage) window.localStorage.setItem(key, String(val));
+      } catch (e) {}
+      _memStore[key] = String(val);
+    }
+
+    // Candidate hosts and ports (handles Windows IPv4 Loopback vs IPv6 localhost)
+    const CANDIDATE_HOSTS = ['127.0.0.1', 'localhost'];
+    const CANDIDATE_PORTS = [9250, 9251, 9252, 9253, 8080, 3000];
+
+    let activeHost = safeGet('adsc_host', '127.0.0.1');
+    let activePort = parseInt(safeGet('adsc_port', '9250'), 10);
+    let activeBaseUrl = `http://${activeHost}:${activePort}`;
+    let activeWsUrl = `ws://${activeHost}:${activePort}`;
+
     let ws = null;
+    let sseSource = null;
     let autoSync = true;
-    const BRIDGE_HTTP = 'http://localhost:9250';
-    const BRIDGE_WS = 'ws://localhost:9250';
+    let isConnected = false;
+    let probeInProgress = false;
 
     const statusDot = document.getElementById('status-dot');
     const statusText = document.getElementById('status-text');
+    const portTag = document.getElementById('port-tag');
+    const btnReconnect = document.getElementById('btn-reconnect');
     const logTerminal = document.getElementById('log-terminal');
     const autoSyncCheck = document.getElementById('auto-sync-check');
     const pullNowBtn = document.getElementById('btn-pull-now');
-
-    autoSyncCheck.addEventListener('change', (e) => {
-      autoSync = e.target.checked;
-      log(`Auto-sync set to ${autoSync ? 'ON' : 'OFF'}`);
-    });
-
-    pullNowBtn.addEventListener('click', () => {
-      fetchLatestPending();
-    });
+    const tabBtnLive = document.getElementById('tab-btn-live');
+    const tabBtnManual = document.getElementById('tab-btn-manual');
+    const tabContentLive = document.getElementById('tab-content-live');
+    const tabContentManual = document.getElementById('tab-content-manual');
+    const manualJsonInput = document.getElementById('manual-json-input');
+    const manualSyncBtn = document.getElementById('btn-manual-sync');
 
     function log(msg, type = 'info') {
+      if (!logTerminal) return;
       const line = document.createElement('div');
-      line.className = `log-row ${type === 'success' ? 'log-success' : type === 'error' ? 'log-error' : ''}`;
+      const cls = type === 'success' ? 'log-success' : (type === 'error' ? 'log-error' : (type === 'warning' ? 'log-warning' : 'log-info'));
+      line.className = `log-row ${cls}`;
       const time = new Date().toLocaleTimeString();
       line.innerHTML = `<span class="log-time">[${time}]</span> <span>${msg}</span>`;
       logTerminal.appendChild(line);
       logTerminal.scrollTop = logTerminal.scrollHeight;
     }
 
-    // Connect to local WebSocket
+    function setOnline(label = 'Bridge Connected') {
+      isConnected = true;
+      if (statusDot) statusDot.className = 'status-dot online';
+      if (statusText) statusText.textContent = label;
+      if (portTag) portTag.textContent = `${activeHost}:${activePort}`;
+    }
+
+    function setOffline(label = 'Bridge Offline') {
+      isConnected = false;
+      if (statusDot) statusDot.className = 'status-dot';
+      if (statusText) statusText.textContent = label;
+    }
+
+    // Probe single endpoint with timeout
+    function probeEndpoint(host, port) {
+      return new Promise((resolve) => {
+        const timeoutMs = 700;
+        let done = false;
+        const timer = setTimeout(() => {
+          if (!done) { done = true; resolve(false); }
+        }, timeoutMs);
+
+        fetch(`http://${host}:${port}/api/status`, { method: 'GET', cache: 'no-store' })
+          .then(res => {
+            if (!done) {
+              clearTimeout(timer);
+              done = true;
+              if (res.ok) {
+                res.json().then(data => {
+                  resolve(data && data.status === 'ok');
+                }).catch(() => resolve(false));
+              } else {
+                resolve(false);
+              }
+            }
+          })
+          .catch(() => {
+            if (!done) {
+              clearTimeout(timer);
+              done = true;
+              resolve(false);
+            }
+          });
+      });
+    }
+
+    // Auto-discover bridge across candidate hosts and ports
+    async function discoverBridge(verbose = false) {
+      if (probeInProgress) return isConnected;
+      probeInProgress = true;
+
+      if (verbose) log(`Scanning endpoints for active bridge server...`, 'info');
+
+      // 1. Try current/saved endpoint first
+      if (await probeEndpoint(activeHost, activePort)) {
+        probeInProgress = false;
+        return true;
+      }
+
+      // 2. Scan candidate matrix
+      for (const host of CANDIDATE_HOSTS) {
+        for (const port of CANDIDATE_PORTS) {
+          if (host === activeHost && port === activePort) continue;
+          const ok = await probeEndpoint(host, port);
+          if (ok) {
+            activeHost = host;
+            activePort = port;
+            activeBaseUrl = `http://${host}:${port}`;
+            activeWsUrl = `ws://${host}:${port}`;
+            safeSet('adsc_host', host);
+            safeSet('adsc_port', port);
+            if (portTag) portTag.textContent = `${host}:${port}`;
+            log(`✓ Discovered bridge server at ${activeBaseUrl}!`, 'success');
+            probeInProgress = false;
+            return true;
+          }
+        }
+      }
+
+      probeInProgress = false;
+      return false;
+    }
+
+    // Payload deduplication and tracking
+    let lastProcessedSig = '';
+    let lastProcessedTime = 0;
+
+    function getPayloadSig(payload) {
+      if (!payload) return '';
+      if (payload.type === 'SYNC_FIGMA_VARIABLES_AND_TOKENS' || payload.tokens) {
+        const brandName = payload.tokens?.brand?.name || 'Tokens';
+        return `TOKENS_${brandName}_${payload.timestamp || ''}`;
+      }
+      if (payload.type === 'SYNC_PROJECT_COMPONENTS_BATCH' || payload.components) {
+        const cnt = payload.components?.length || payload.batchCount || 0;
+        return `BATCH_${cnt}_${payload.timestamp || ''}`;
+      }
+      const compId = payload.component?.id || payload.component?.name || payload.name || 'Component';
+      return `COMP_${compId}_${payload.timestamp || ''}`;
+    }
+
+    function isDuplicatePayload(payload) {
+      if (!payload) return true;
+      const sig = getPayloadSig(payload);
+      const now = Date.now();
+      if (sig && sig === lastProcessedSig && (now - lastProcessedTime) < 8000) {
+        return true;
+      }
+      return false;
+    }
+
+    function recordPayloadProcessed(payload) {
+      lastProcessedSig = getPayloadSig(payload);
+      lastProcessedTime = Date.now();
+    }
+
+    // 1. Primary Engine: Server-Sent Events (SSE)
+    function connectSSE() {
+      try {
+        if (sseSource) {
+          sseSource.close();
+          sseSource = null;
+        }
+        sseSource = new EventSource(`${activeBaseUrl}/api/figma/events`);
+
+        sseSource.onopen = () => {
+          setOnline('Bridge Live (SSE)');
+          log(`Connected to live stream at ${activeBaseUrl}`, 'success');
+        };
+
+        const handleIncoming = (payload) => {
+          if (!payload || isDuplicatePayload(payload)) return;
+          const name = (payload.components && payload.components.length)
+            ? `Project Scope (${payload.components.length} components)`
+            : (payload.batchCount ? `Project Scope (${payload.batchCount} components)` : (payload.component?.name || payload.tokens?.brand?.name || (payload.tokens ? 'Design Tokens & Styles' : 'Component')));
+          log(`Incoming push for "${name}"!`, 'success');
+          if (autoSync) {
+            syncPayloadToCanvas(payload);
+          } else {
+            log('Auto-sync is off. Click "Pull Latest" to render.');
+          }
+        };
+
+        sseSource.addEventListener('PUSH_TO_FIGMA', (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.payload) handleIncoming(data.payload);
+          } catch (e) {}
+        });
+
+        sseSource.addEventListener('SYNC_PROJECT_COMPONENTS_BATCH', (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.payload) handleIncoming(data.payload);
+          } catch (e) {}
+        });
+
+        sseSource.addEventListener('SYNC_FIGMA_VARIABLES_AND_TOKENS', (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.payload) handleIncoming(data.payload);
+          } catch (e) {}
+        });
+
+        sseSource.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.payload) handleIncoming(data.payload);
+          } catch (e) {}
+        };
+
+        sseSource.onerror = () => {
+          setOffline('Bridge Disconnected');
+          if (sseSource) {
+            sseSource.close();
+            sseSource = null;
+          }
+        };
+      } catch (e) {}
+    }
+
+    // 2. Secondary Engine: WebSocket
     function connectWS() {
       try {
-        ws = new WebSocket(BRIDGE_WS);
+        if (ws) {
+          ws.close();
+          ws = null;
+        }
+        ws = new WebSocket(activeWsUrl);
 
         ws.onopen = () => {
-          statusDot.className = 'status-dot online';
-          statusText.textContent = 'Bridge Connected';
-          log('Connected to Bridge WebSocket at ' + BRIDGE_WS, 'success');
-          // Identify as Figma Plugin
+          setOnline('Bridge Live (WS)');
           ws.send(JSON.stringify({ type: 'CLIENT_IDENTIFY', role: 'FIGMA_PLUGIN' }));
         };
 
@@ -199,55 +510,60 @@
           try {
             const data = JSON.parse(event.data);
             if ((data.type === 'PUSH_TO_FIGMA' || data.type === 'SYNC_FIGMA_VARIABLES_AND_TOKENS') && data.payload) {
-              const payloadName = data.payload.component?.name || data.payload.tokens?.brand?.name || (data.type === 'SYNC_FIGMA_VARIABLES_AND_TOKENS' ? 'Design Tokens' : 'Component');
-              log(`Incoming push for "${payloadName}"!`, 'success');
-              if (autoSync) {
-                syncPayloadToCanvas(data.payload);
-              } else {
-                log('Auto-sync is disabled. Click "Pull Latest" to sync.');
-              }
+              if (isDuplicatePayload(data.payload)) return;
+              const name = data.payload.component?.name || data.payload.tokens?.brand?.name || 'Component';
+              log(`WebSocket push for "${name}"!`, 'success');
+              if (autoSync) syncPayloadToCanvas(data.payload);
             }
-          } catch (e) {
-            console.error('WS message error:', e);
-          }
+          } catch (e) {}
         };
 
-        ws.onclose = () => {
-          statusDot.className = 'status-dot';
-          statusText.textContent = 'Bridge Disconnected';
-          setTimeout(connectWS, 4000);
-        };
-
-        ws.onerror = () => {
-          statusDot.className = 'status-dot';
-          statusText.textContent = 'Bridge Offline';
-        };
-      } catch (e) {
-        setTimeout(connectWS, 4000);
-      }
+        ws.onerror = () => {};
+        ws.onclose = () => {};
+      } catch (e) {}
     }
 
-    // HTTP polling fallback
-    async function fetchLatestPending() {
-      log('Polling bridge for pending schemas...');
+    // 3. Active HTTP Polling
+    async function fetchLatestPending(silent = false) {
+      if (!silent) log(`Checking ${activeBaseUrl} for queued items...`, 'info');
       try {
-        const res = await fetch(`${BRIDGE_HTTP}/api/figma/pending`);
+        const res = await fetch(`${activeBaseUrl}/api/figma/pending?clear=true`, { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
-          if (data && data.payload) {
-            log(`Found pending component: ${data.payload.component?.name}!`, 'success');
+          setOnline('Bridge Connected');
+          if (data && data.hasPending && data.payload) {
+            if (isDuplicatePayload(data.payload)) {
+              // Already handled via SSE / recent push
+              return;
+            }
+            const name = (data.payload.components && data.payload.components.length)
+              ? `Project Scope (${data.payload.components.length} components)`
+              : (data.payload.batchCount ? `Project Scope (${data.payload.batchCount} components)` : (data.payload.component?.name || data.payload.tokens?.brand?.name || 'Component'));
+            log(`Found pending schema for "${name}"!`, 'success');
             syncPayloadToCanvas(data.payload);
-          } else {
-            log('No pending schemas queued on bridge.');
+          } else if (!silent) {
+            log('No pending items queued on bridge.', 'info');
           }
+        } else {
+          setOffline('Bridge Server Error');
+          if (!silent) log(`Server returned HTTP ${res.status}`, 'error');
         }
       } catch (e) {
-        log(`Bridge poll failed: ${e.message}`, 'error');
+        setOffline('Bridge Offline');
+        if (!silent) {
+          log(`Cannot reach ${activeBaseUrl}. Make sure start.bat is running!`, 'error');
+        }
       }
     }
 
     function syncPayloadToCanvas(payload) {
-      log(`Sending ${payload.component?.name} to Figma canvas engine...`);
+      if (!payload || isDuplicatePayload(payload)) return;
+      recordPayloadProcessed(payload);
+
+      const name = (payload.components && payload.components.length)
+        ? `Project Scope (${payload.components.length} components)`
+        : (payload.batchCount ? `Project Scope (${payload.batchCount} components)` : (payload.component?.name || payload.tokens?.brand?.name || 'Schema'));
+      log(`Sending "${name}" to Figma canvas engine...`, 'info');
       parent.postMessage({
         pluginMessage: {
           type: 'SYNC_PAYLOAD_TO_CANVAS',
@@ -256,23 +572,91 @@
       }, '*');
     }
 
-    // Listen for canvas execution report from code.js
+    // Tab switcher events
+    tabBtnLive.addEventListener('click', () => {
+      tabBtnLive.classList.add('active');
+      tabBtnManual.classList.remove('active');
+      tabContentLive.classList.add('active');
+      tabContentManual.classList.remove('active');
+    });
+
+    tabBtnManual.addEventListener('click', () => {
+      tabBtnManual.classList.add('active');
+      tabBtnLive.classList.remove('active');
+      tabContentManual.classList.add('active');
+      tabContentLive.classList.remove('active');
+    });
+
+    autoSyncCheck.addEventListener('change', (e) => {
+      autoSync = e.target.checked;
+      log(`Auto-sync set to ${autoSync ? 'ON' : 'OFF'}`, 'info');
+    });
+
+    pullNowBtn.addEventListener('click', async () => {
+      if (!isConnected) {
+        await discoverBridge(true);
+      }
+      fetchLatestPending(false);
+    });
+
+    btnReconnect.addEventListener('click', async () => {
+      log('Manual scan requested...', 'info');
+      const found = await discoverBridge(true);
+      if (found) {
+        setOnline('Bridge Connected');
+        connectSSE();
+        connectWS();
+        fetchLatestPending(false);
+      } else {
+        setOffline('Bridge Offline');
+        log('✗ Could not reach server on any candidate port. Please run start.bat!', 'error');
+      }
+    });
+
+    portTag.addEventListener('click', () => {
+      const current = `${activeHost}:${activePort}`;
+      const input = prompt('Enter Bridge Host:Port (e.g. 127.0.0.1:9250 or localhost:9251):', current);
+      if (input && input.trim()) {
+        const parts = input.trim().split(':');
+        activeHost = parts[0] || '127.0.0.1';
+        activePort = parseInt(parts[1] || '9250', 10);
+        activeBaseUrl = `http://${activeHost}:${activePort}`;
+        activeWsUrl = `ws://${activeHost}:${activePort}`;
+        safeSet('adsc_host', activeHost);
+        safeSet('adsc_port', activePort);
+        portTag.textContent = `${activeHost}:${activePort}`;
+        log(`Endpoint manually set to ${activeBaseUrl}. Reconnecting...`, 'info');
+        connectSSE();
+        connectWS();
+        fetchLatestPending(false);
+      }
+    });
+
+    manualSyncBtn.addEventListener('click', () => {
+      const text = manualJsonInput.value.trim();
+      if (!text) {
+        log('Error: Paste a JSON schema first!', 'error');
+        return;
+      }
+      try {
+        const payload = JSON.parse(text);
+        log(`Generating manually pasted schema...`, 'info');
+        syncPayloadToCanvas(payload);
+      } catch (err) {
+        log(`JSON parse error: ${err.message}`, 'error');
+      }
+    });
+
+    // Canvas Execution Report from code.js
     window.onmessage = (event) => {
       const msg = event.data?.pluginMessage;
       if (!msg) return;
 
       if (msg.type === 'FIGMA_SYNC_SUCCESS') {
-        log(`✓ Created ${msg.variantCount} variants of "${msg.componentName}" on Canvas!`, 'success');
+        log(`✓ Synced "${msg.componentName}" to canvas!`, 'success');
 
         // Send ACK back to bridge server
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({
-            type: 'FIGMA_ACK',
-            componentName: msg.componentName,
-            variantCount: msg.variantCount
-          }));
-        }
-        fetch(`${BRIDGE_HTTP}/api/figma/ack`, {
+        fetch(`${activeBaseUrl}/api/figma/ack`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -281,30 +665,33 @@
           })
         }).catch(() => {});
       } else if (msg.type === 'FIGMA_SYNC_ERROR') {
-        log(`Error: ${msg.error}`, 'error');
+        log(`Canvas Error: ${msg.error}`, 'error');
       }
     };
 
-    // Start WebSocket
-    connectWS();
-
-    // Check polling every 5s as fallback
-    setInterval(() => {
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        fetch(`${BRIDGE_HTTP}/api/status`)
-          .then(res => res.json())
-          .then(data => {
-            if (data.status === 'ok') {
-              statusDot.className = 'status-dot online';
-              statusText.textContent = 'Bridge HTTP Online';
-            }
-          })
-          .catch(() => {
-            statusDot.className = 'status-dot';
-            statusText.textContent = 'Bridge Offline';
-          });
+    // Auto-boot sequence
+    (async () => {
+      log('Initializing AI Design System Bridge...', 'info');
+      const found = await discoverBridge();
+      if (found) {
+        setOnline('Bridge Connected');
+        log(`✓ Connected to local bridge at ${activeBaseUrl}!`, 'success');
+        connectSSE();
+        connectWS();
+      } else {
+        log(`Looking for bridge on ${activeBaseUrl}... (Ensure start.bat is running)`, 'warning');
       }
-    }, 5000);
+
+      // Auto-poll loop every 1.5s
+      setInterval(async () => {
+        if (!isConnected) {
+          await discoverBridge();
+        }
+        if (autoSync && isConnected) {
+          fetchLatestPending(true);
+        }
+      }, 1500);
+    })();
   </script>
 </body>
 </html>

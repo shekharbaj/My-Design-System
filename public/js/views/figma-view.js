@@ -44,13 +44,16 @@ export class FigmaView {
           </div>
 
           <div class="banner-right-actions">
-            <button class="adsc-btn btn-figma-hero ${this.isPushing ? 'loading' : ''}" id="btn-push-active-figma">
+            <button class="adsc-btn btn-figma-hero ${this.isPushing ? 'loading' : ''}" id="btn-push-scope-figma" title="Sync all selected project components to Figma">
               ${ICON_SVGS.figma}
-              <span>${this.isPushing ? 'Syncing to Canvas...' : `Push "${comp.name}" to Figma`}</span>
+              <span>${this.isPushing ? 'Syncing to Canvas...' : `⚡ Push Project Scope (${store.includedComponentIds.size} Comps)`}</span>
             </button>
-            <button class="adsc-btn btn-secondary" id="btn-push-all-figma">
+            <button class="adsc-btn btn-secondary" id="btn-push-active-figma" title="Push only the currently active component">
+              <span>Push Active ("${comp.name}")</span>
+            </button>
+            <button class="adsc-btn btn-secondary" id="btn-push-all-figma" title="Push entire catalog of 66 components">
               ${ICON_SVGS.layers}
-              <span>Push All Library Components</span>
+              <span>Push All Library (${store.components.length})</span>
             </button>
           </div>
         </div>
@@ -195,6 +198,26 @@ export class FigmaView {
   }
 
   attachListeners(comp) {
+    // Push project scope button
+    const pushScopeBtn = this.container.querySelector('#btn-push-scope-figma');
+    if (pushScopeBtn) {
+      pushScopeBtn.addEventListener('click', async () => {
+        this.isPushing = true;
+        pushScopeBtn.classList.add('loading');
+        pushScopeBtn.querySelector('span').textContent = 'Syncing Scope...';
+
+        try {
+          await bridgeClient.pushProjectScopeComponents();
+        } finally {
+          setTimeout(() => {
+            this.isPushing = false;
+            pushScopeBtn.classList.remove('loading');
+            pushScopeBtn.querySelector('span').textContent = `⚡ Push Project Scope (${store.includedComponentIds.size} Comps)`;
+          }, 700);
+        }
+      });
+    }
+
     // Push active component button
     const pushBtn = this.container.querySelector('#btn-push-active-figma');
     if (pushBtn) {

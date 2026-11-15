@@ -7,12 +7,8 @@
   "editorType": ["figma"],
   "networkAccess": {
     "allowedDomains": [
-      "http://localhost:9250"
+      "*"
     ],
-    "devAllowedDomains": [
-      "http://localhost:9250",
-      "http://localhost"
-    ],
-    "reasoning": "Connects to AI Design System Creator local bridge running on localhost:9250 to receive live design tokens and component sets."
+    "reasoning": "Connects to AI Design System Creator local bridge server to sync design tokens and component contracts."
   }
 }

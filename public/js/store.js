@@ -6,9 +6,10 @@ class StateStore {
     this.listeners = new Map();
     this.theme = localStorage.getItem('adsc_theme') || 'light';
     this.themeMode = localStorage.getItem('adsc_theme_mode') || 'light'; // 'system' | 'light' | 'dark'
-    this.currentView = 'editor'; // 'editor' (default view matching attachment) | 'preview' | 'matrix' | 'code' | 'figma' | 'tokens'
-    this.currentSubTab = 'props'; // 'props' | 'anatomy' | 'variants'
+    this.currentView = 'editor'; // 'editor' | 'preview' | 'matrix' | 'code' | 'figma' | 'tokens' | 'docs'
+    this.currentSubTab = 'preview'; // 'preview' (default per Req 21) | 'props' | 'anatomy' | 'variants'
     this.kindsTab = 'kinds'; // 'kinds' | 'library'
+    this.draftComponents = []; // Active unpublished drafts (Req 24)
     this.components = this.loadInitialComponents();
     // Default to 'filter-chip' to match attachment
     const filterChipComp = this.components.find(c => c.id === 'filter-chip');
@@ -25,37 +26,155 @@ class StateStore {
       pendingCount: 0
     };
     this.history = [];
+    this.projectScopeFilter = 'all'; // 'all' | 'in_project'
+    this.includedComponentIds = this.loadIncludedComponents();
+    this.includedFoundations = this.loadIncludedFoundations();
+  }
+
+  loadIncludedComponents() {
+    const saved = localStorage.getItem('adsc_included_components');
+    if (saved) {
+      try {
+        const arr = JSON.parse(saved);
+        if (Array.isArray(arr) && arr.length > 0) {
+          const clean = arr.filter(id => !id.startsWith('graphic-'));
+          return new Set(clean);
+        }
+      } catch (e) {}
+    }
+    // Default core starter set for a new design system project
+    const defaultCore = [
+      'filter-chip', 'button', 'compact-button', 'chip', 'input-field',
+      'checkbox', 'radio-button', 'switch-toggle', 'select', 'badge',
+      'avatar', 'card', 'dialog-modal', 'dropdown-menu', 'tab',
+      'table', 'toast-notification', 'tooltip'
+    ];
+    return new Set(defaultCore);
+  }
+
+  saveIncludedComponents() {
+    try {
+      localStorage.setItem('adsc_included_components', JSON.stringify(Array.from(this.includedComponentIds)));
+    } catch (e) {}
+  }
+
+  loadIncludedFoundations() {
+    const saved = localStorage.getItem('adsc_included_foundations');
+    if (saved) {
+      try {
+        const arr = JSON.parse(saved);
+        if (Array.isArray(arr) && arr.length > 0) return new Set(arr);
+      } catch (e) {}
+    }
+    return new Set(['colors', 'typography', 'spacing', 'radii', 'shadows', 'states']);
+  }
+
+  saveIncludedFoundations() {
+    try {
+      localStorage.setItem('adsc_included_foundations', JSON.stringify(Array.from(this.includedFoundations)));
+    } catch (e) {}
+  }
+
+  toggleComponentInclusion(id) {
+    if (this.includedComponentIds.has(id)) {
+      this.includedComponentIds.delete(id);
+    } else {
+      this.includedComponentIds.add(id);
+    }
+    this.saveIncludedComponents();
+    this.emit('project:scope-changed', {
+      includedCount: this.includedComponentIds.size,
+      totalCount: this.components.length
+    });
+  }
+
+  isComponentIncluded(id) {
+    return this.includedComponentIds.has(id);
+  }
+
+  getIncludedComponents() {
+    if (!this.includedComponentIds || this.includedComponentIds.size === 0) {
+      return this.components.slice(0, 18);
+    }
+    return this.components.filter(c => this.includedComponentIds.has(c.id));
+  }
+
+  setIncludedComponents(idsArray) {
+    this.includedComponentIds = new Set(idsArray);
+    this.saveIncludedComponents();
+    this.emit('project:scope-changed', {
+      includedCount: this.includedComponentIds.size,
+      totalCount: this.components.length
+    });
+  }
+
+  toggleFoundationInclusion(key) {
+    if (this.includedFoundations.has(key)) {
+      this.includedFoundations.delete(key);
+    } else {
+      this.includedFoundations.add(key);
+    }
+    this.saveIncludedFoundations();
+    this.emit('project:scope-changed');
+  }
+
+  isFoundationIncluded(key) {
+    return this.includedFoundations.has(key);
+  }
+
+  setProjectScopeFilter(filter) {
+    this.projectScopeFilter = filter;
+    this.emit('filter:changed');
   }
 
   loadInitialComponents() {
-    const CURRENT_VERSION = '2.2.0';
+    const CURRENT_VERSION = '2.5.0';
     const savedVersion = localStorage.getItem('adsc_components_version');
     if (savedVersion === CURRENT_VERSION) {
       const saved = localStorage.getItem('adsc_components');
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          if (parsed && parsed.length >= INITIAL_COMPONENTS.length) {
-            return parsed;
+          if (parsed && Array.isArray(parsed) && parsed.length > 0) {
+            // Filter out old graphics if any
+            return parsed.filter(c => !c.id.startsWith('graphic-'));
           }
         } catch (e) {
           console.warn('Failed to parse cached components, using defaults', e);
         }
       }
     }
-    // Automatically load all 65 design system components
+    // Automatically load fresh design system components without graphics
     localStorage.setItem('adsc_components_version', CURRENT_VERSION);
-    localStorage.setItem('adsc_components', JSON.stringify(INITIAL_COMPONENTS));
-    return JSON.parse(JSON.stringify(INITIAL_COMPONENTS));
+    const cleanInitial = INITIAL_COMPONENTS.filter(c => !c.id.startsWith('graphic-'));
+    localStorage.setItem('adsc_components', JSON.stringify(cleanInitial));
+    return JSON.parse(JSON.stringify(cleanInitial));
   }
 
   saveComponents() {
     try {
-      localStorage.setItem('adsc_components_version', '2.2.0');
+      localStorage.setItem('adsc_components_version', '2.5.0');
       localStorage.setItem('adsc_components', JSON.stringify(this.components));
     } catch (e) {
       console.warn('LocalStorage save failed:', e);
     }
+  }
+
+  // Draft Management (Requirement 24)
+  addDraft(component) {
+    if (!this.draftComponents.find(d => d.id === component.id)) {
+      this.draftComponents.push(JSON.parse(JSON.stringify(component)));
+      this.emit('draft:updated');
+    }
+  }
+
+  removeDraft(componentId) {
+    this.draftComponents = this.draftComponents.filter(d => d.id !== componentId);
+    this.emit('draft:updated');
+  }
+
+  isDraft(componentId) {
+    return this.draftComponents.some(d => d.id === componentId);
   }
 
   subscribe(event, callback) {
@@ -89,7 +208,8 @@ class StateStore {
         c.name.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
         c.description.toLowerCase().includes(this.searchQuery.toLowerCase());
       const matchesCategory = this.selectedCategory === 'All' || c.category === this.selectedCategory;
-      return matchesSearch && matchesCategory;
+      const matchesProjectScope = this.projectScopeFilter !== 'in_project' || this.includedComponentIds.has(c.id);
+      return matchesSearch && matchesCategory && matchesProjectScope;
     });
   }
 
@@ -125,7 +245,7 @@ class StateStore {
   }
 
   setView(view) {
-    if (['editor', 'preview', 'matrix', 'code', 'figma', 'tokens'].includes(view)) {
+    if (['editor', 'preview', 'matrix', 'code', 'figma', 'tokens', 'docs'].includes(view)) {
       this.currentView = view;
       this.emit('view:changed', view);
     }
@@ -136,7 +256,7 @@ class StateStore {
   }
 
   setSubTab(subTab) {
-    if (['props', 'anatomy', 'variants'].includes(subTab)) {
+    if (['preview', 'props', 'anatomy', 'variants'].includes(subTab)) {
       this.currentSubTab = subTab;
       this.emit('subTab:changed', subTab);
     }
@@ -162,6 +282,7 @@ class StateStore {
     const comp = this.components.find(c => c.id === id);
     if (comp) {
       this.activeComponentId = id;
+      this.currentSubTab = 'preview'; // Show Preview first per Requirement 21
       this.emit('component:selected', comp);
     }
   }

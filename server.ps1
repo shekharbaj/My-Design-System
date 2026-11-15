@@ -31,8 +31,42 @@ $mimeTypes = @{
     ".ico"  = "image/x-icon"
 }
 
-$listener = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Loopback, $Port)
-$listener.Start()
+$activePort = $Port
+$maxAttempts = 15
+$attempt = 0
+$listener = $null
+
+while ($attempt -lt $maxAttempts) {
+    try {
+        $listener = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Loopback, $activePort)
+        $listener.Start()
+        break
+    } catch {
+        Write-Warning "Port $activePort is unavailable. Trying $($activePort + 1)..."
+        $activePort++
+        $attempt++
+        Start-Sleep -Milliseconds 100
+    }
+}
+
+if ($null -eq $listener) {
+    Write-Error "Failed to bind to an available port after $maxAttempts attempts."
+    exit 1
+}
+
+$Port = $activePort
+
+# Save active port for plugin and tools
+try {
+    $portObj = @{ port = $Port; url = "http://localhost:$Port" }
+    $portJson = ConvertTo-Json $portObj
+    Set-Content -Path (Join-Path $scriptDir "active-port.json") -Value $portJson -Encoding UTF8
+} catch {}
+
+# Open default browser once listening
+try {
+    Start-Process "http://localhost:$Port"
+} catch {}
 
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Cyan

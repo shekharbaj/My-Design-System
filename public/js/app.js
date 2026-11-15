@@ -8,10 +8,12 @@ import { MatrixView } from './views/matrix-view.js';
 import { CodeView } from './views/code-view.js';
 import { FigmaView } from './views/figma-view.js';
 import { TokensView } from './views/tokens-view.js';
+import { DocsView } from './views/docs-view.js';
 import { PropModal } from './modals/prop-modal.js';
 import { AnatomyModal } from './modals/anatomy-modal.js';
 import { NewComponentModal } from './modals/new-component.js';
 import { SandboxModal } from './modals/sandbox-modal.js';
+import { ProjectScopeModal } from './modals/project-scope-modal.js';
 
 class App {
   constructor() {
@@ -21,6 +23,7 @@ class App {
     this.anatomyModal = new AnatomyModal();
     this.newCompModal = new NewComponentModal();
     this.sandboxModal = new SandboxModal();
+    this.scopeModal = new ProjectScopeModal();
 
     this.init();
   }
@@ -121,6 +124,10 @@ class App {
       this.refreshSidebarList();
       this.syncUrlState();
     });
+    store.subscribe('project:scope-changed', () => {
+      this.renderTopNav();
+      this.refreshSidebarList();
+    });
     store.subscribe('bridge:status', () => this.updateBridgeIndicators());
   }
 
@@ -129,7 +136,7 @@ class App {
     if (!nav) return;
 
     nav.innerHTML = `
-      <!-- Top Nav Left: [ Components ] and [ + New component ] (Popup Trigger) -->
+      <!-- Top Nav Left: [ Components ] and [ + New component ] and [ Project Scope ] -->
       <div class="top-nav-left">
         <button class="nav-components-btn" id="btn-toggle-sidebar" title="Toggle Component Library">
           <span class="icon">◫</span>
@@ -137,6 +144,13 @@ class App {
         </button>
         <button class="nav-new-comp-btn" id="btn-top-new-comp" title="Create New Component (Opens in Popup)">
           <span>+ New component</span>
+        </button>
+        <button class="nav-scope-btn" id="btn-project-scope" title="Configure Foundations & Components included in this Project (Requirement 12)">
+          <span class="scope-icon">⚙</span>
+          <span>Project Scope <strong class="scope-count-badge">${store.includedComponentIds.size}/${store.components.length}</strong></span>
+        </button>
+        <button class="nav-quick-push-btn" id="btn-quick-push-scope" title="Push all ${store.includedComponentIds.size} selected components to Figma canvas">
+          <span>⚡ Push Scope to Figma</span>
         </button>
       </div>
 
@@ -146,9 +160,13 @@ class App {
           <span class="wf-step-num">✦ 1.</span>
           <span>Foundation & Tokens</span>
         </button>
-        <button class="workflow-step-pill ${store.currentView !== 'tokens' ? 'active' : ''}" id="btn-wf-components" title="2. Component Anatomy, Props & Variant Matrices">
+        <button class="workflow-step-pill ${store.currentView === 'editor' ? 'active' : ''}" id="btn-wf-components" title="2. Component Anatomy, Props & Variant Matrices">
           <span class="wf-step-num">◫ 2.</span>
           <span>Component Contracts</span>
+        </button>
+        <button class="workflow-step-pill ${store.currentView === 'docs' ? 'active' : ''}" id="btn-wf-docs" title="3. Design System Documentation Site & Standards (Requirement 25)">
+          <span class="wf-step-num">📖 3.</span>
+          <span>Documentation Site</span>
         </button>
       </div>
 
@@ -179,6 +197,29 @@ class App {
       newCompBtn.addEventListener('click', () => this.newCompModal.open());
     }
 
+    // Project Scope Button - OPENS POPUP (Requirement 12)
+    const scopeBtn = nav.querySelector('#btn-project-scope');
+    if (scopeBtn) {
+      scopeBtn.addEventListener('click', () => this.scopeModal.open());
+    }
+
+    // Quick Push Scope to Figma
+    const quickPushBtn = nav.querySelector('#btn-quick-push-scope');
+    if (quickPushBtn) {
+      quickPushBtn.addEventListener('click', async () => {
+        quickPushBtn.disabled = true;
+        quickPushBtn.innerHTML = '<span>Syncing...</span>';
+        try {
+          await bridgeClient.pushProjectScopeComponents();
+        } finally {
+          setTimeout(() => {
+            quickPushBtn.disabled = false;
+            quickPushBtn.innerHTML = '<span>⚡ Push Scope to Figma</span>';
+          }, 800);
+        }
+      });
+    }
+
     // Workflow Step 1: Foundation & Tokens
     const wfTokensBtn = nav.querySelector('#btn-wf-tokens');
     if (wfTokensBtn) {
@@ -192,6 +233,14 @@ class App {
     if (wfCompsBtn) {
       wfCompsBtn.addEventListener('click', () => {
         store.setView('editor');
+      });
+    }
+
+    // Workflow Step 3: Documentation Site (Requirement 25)
+    const wfDocsBtn = nav.querySelector('#btn-wf-docs');
+    if (wfDocsBtn) {
+      wfDocsBtn.addEventListener('click', () => {
+        store.setView('docs');
       });
     }
 
@@ -236,15 +285,27 @@ class App {
 
   renderSidebarContent() {
     const filtered = store.getFilteredComponents();
-    const activeComp = store.getActiveComponent();
-
-    // Drafts item: Filter chip (or active component)
-    const draftComp = filtered.find(c => c.id === 'filter-chip') || activeComp;
-
-    // Remaining Library items
-    const libraryComps = filtered.filter(c => c.id !== draftComp?.id);
+    const drafts = store.draftComponents || [];
+    const hasDrafts = drafts.length > 0;
+    const libraryComps = filtered;
 
     return `
+      <!-- 0. Project Scope Selector (Requirement 12) -->
+      <div class="sidebar-scope-selector">
+        <div class="sidebar-scope-pills">
+          <button class="scope-pill ${store.projectScopeFilter === 'in_project' ? 'active' : ''}" data-filter="in_project" title="Show only components in active project">
+            In Project (${store.includedComponentIds.size})
+          </button>
+          <button class="scope-pill ${store.projectScopeFilter === 'all' ? 'active' : ''}" data-filter="all" title="Show all catalog components">
+            All (${store.components.length})
+          </button>
+        </div>
+        <div style="display: flex; gap: 6px;">
+          <button class="btn-manage-scope" id="btn-sidebar-manage-scope" style="flex: 1;" title="Choose which foundations and components are in your project">⚙ Scope (${store.includedComponentIds.size})</button>
+          <button class="btn-manage-scope" id="btn-sidebar-push-scope" style="flex: 1.3; background: #FAF5FF; color: #9333EA; border-color: #DDD6FE; font-weight: 600;" title="Push all ${store.includedComponentIds.size} project components directly to Figma">⚡ Push to Figma</button>
+        </div>
+      </div>
+
       <!-- 1. Industry Standard Foundation & Brand Tokens Section (Requirement 4) -->
       <div class="sidebar-foundation-banner">
         <button class="foundation-nav-pill ${store.currentView === 'tokens' ? 'active' : ''}" id="btn-sidebar-tokens" title="1. Design Foundations: Brand Colors, Swatches, Light/Dark Modes & Guidelines">
@@ -261,28 +322,38 @@ class App {
         <span class="step-label">2. COMPONENT SPECS</span>
       </div>
 
-      <!-- Drafts Section -->
-      <div class="sidebar-section-group">
-        <span class="sidebar-group-title">Drafts</span>
-        <div class="sidebar-drafts-list">
-          ${draftComp ? `
-            <div class="sidebar-item-row ${draftComp.id === store.activeComponentId && store.currentView !== 'tokens' ? 'active-draft' : ''}" data-id="${draftComp.id}">
-              <span class="item-name">${draftComp.name}</span>
-              <button class="btn-item-clear" title="Clear Draft" data-id="${draftComp.id}">✕</button>
-            </div>
-          ` : ''}
+      <!-- Drafts Section: ONLY SHOWN WHEN DRAFTS EXIST (Requirement 24) -->
+      ${hasDrafts ? `
+        <div class="sidebar-section-group sidebar-drafts-group">
+          <div class="sidebar-group-header-row">
+            <span class="sidebar-group-title">Drafts (${drafts.length})</span>
+            <span class="draft-badge">Unpublished</span>
+          </div>
+          <div class="sidebar-drafts-list">
+            ${drafts.map(draftComp => `
+              <div class="sidebar-item-row ${draftComp.id === store.activeComponentId && store.currentView !== 'tokens' ? 'active-draft' : ''}" data-id="${draftComp.id}">
+                <span class="item-name">${draftComp.name}</span>
+                <button class="btn-item-clear" title="Clear Draft" data-id="${draftComp.id}">✕</button>
+              </div>
+            `).join('')}
+          </div>
         </div>
-      </div>
+      ` : ''}
 
-      <!-- Library Section -->
+      <!-- Library Section with Clickable Green Tick Toggle (Requirement 22) -->
       <div class="sidebar-section-group">
-        <span class="sidebar-group-title">Library</span>
+        <span class="sidebar-group-title">Library (${libraryComps.length})</span>
         <div class="sidebar-library-list">
           ${libraryComps.map(comp => {
             const isSelected = comp.id === store.activeComponentId && store.currentView !== 'tokens';
+            const inProject = store.isComponentIncluded(comp.id);
             return `
               <div class="library-item-row ${isSelected ? 'selected' : ''}" data-id="${comp.id}" title="${comp.name}">
-                ${comp.name}
+                <span class="item-name">${comp.name}</span>
+                ${inProject 
+                  ? `<button class="btn-quick-toggle-project in-project" data-comp-id="${comp.id}" title="Included in project (click to remove)">✓</button>` 
+                  : `<button class="btn-quick-toggle-project not-in-project" data-comp-id="${comp.id}" title="Click to add to project">+</button>`
+                }
               </div>
             `;
           }).join('')}
@@ -292,6 +363,59 @@ class App {
   }
 
   bindSidebarClicks() {
+    // Project Scope Selector clicks (Requirement 12)
+    const scopePills = document.querySelectorAll('.scope-pill');
+    scopePills.forEach(pill => {
+      pill.addEventListener('click', () => {
+        const filter = pill.getAttribute('data-filter');
+        store.setProjectScopeFilter(filter);
+      });
+    });
+
+    const manageScopeBtn = document.getElementById('btn-sidebar-manage-scope');
+    if (manageScopeBtn) {
+      manageScopeBtn.addEventListener('click', () => this.scopeModal.open());
+    }
+
+    const sidebarPushBtn = document.getElementById('btn-sidebar-push-scope');
+    if (sidebarPushBtn) {
+      sidebarPushBtn.addEventListener('click', async () => {
+        sidebarPushBtn.disabled = true;
+        sidebarPushBtn.textContent = 'Syncing...';
+        try {
+          await bridgeClient.pushProjectScopeComponents();
+        } finally {
+          setTimeout(() => {
+            sidebarPushBtn.disabled = false;
+            sidebarPushBtn.textContent = '⚡ Push to Figma';
+          }, 800);
+        }
+      });
+    }
+
+    // Quick project scope toggle: click green tick to remove, click plus to add (Requirement 22)
+    const toggleScopeBtns = document.querySelectorAll('.btn-quick-toggle-project');
+    toggleScopeBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute('data-comp-id');
+        store.toggleComponentInclusion(id);
+        this.refreshSidebarList();
+        this.updateTopScopeBadge();
+      });
+    });
+
+    // Clear Drafts button (Requirement 24)
+    const clearDraftBtns = document.querySelectorAll('.btn-item-clear');
+    clearDraftBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute('data-id');
+        store.removeDraft(id);
+        this.refreshSidebarList();
+      });
+    });
+
     // Foundation & Brand Tokens click
     const tokensNavBtn = document.getElementById('btn-sidebar-tokens');
     if (tokensNavBtn) {
@@ -354,6 +478,9 @@ class App {
       case 'tokens':
         this.currentViewInstance = new TokensView(container);
         break;
+      case 'docs':
+        this.currentViewInstance = new DocsView(container);
+        break;
       default:
         this.currentViewInstance = new EditorView(container);
         break;
@@ -402,7 +529,7 @@ class App {
 
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key.toLowerCase() === 'f' || e.key.toLowerCase() === 'p')) {
         e.preventDefault();
-        bridgeClient.pushComponent();
+        bridgeClient.pushProjectScopeComponents();
       }
     });
   }
