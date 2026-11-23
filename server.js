@@ -2,6 +2,7 @@
 // Pure native Node.js implementation with zero required external dependencies (uses native 'http', 'fs', 'path', 'url')
 
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const url = require('url');
@@ -22,6 +23,32 @@ let lastSyncTimestamp = null;
 let lastPushedComponentName = null;
 const connectedWsClients = new Set();
 const sseClients = new Set();
+
+// Dedicated tracking for Figma Plugin vs Web App clients
+const figmaWsClients = new Set();
+const webAppWsClients = new Set();
+const figmaSseClients = new Set();
+const webAppSseClients = new Set();
+
+function getFigmaClientsCount() {
+  return figmaWsClients.size + figmaSseClients.size;
+}
+
+function broadcastBridgeStatus() {
+  const figmaTotal = getFigmaClientsCount();
+  const statusPayload = JSON.stringify({
+    type: 'BRIDGE_STATUS',
+    figmaConnected: figmaTotal > 0,
+    figmaClientsCount: figmaTotal,
+    pendingCount: pendingFigmaPayload ? 1 : 0
+  });
+  for (const clientRes of sseClients) {
+    try { clientRes.write(`event: BRIDGE_STATUS\ndata: ${statusPayload}\n\n`); } catch(e) {}
+  }
+  for (const ws of connectedWsClients) {
+    try { if (ws.readyState === 1) ws.send(statusPayload); } catch(e) {}
+  }
+}
 
 // MIME types for static assets
 const MIME_TYPES = {
@@ -108,16 +135,32 @@ const server = http.createServer(async (req, res) => {
     });
     res.write(`: connected\n\n`);
     sseClients.add(res);
-    console.log(`[Bridge SSE] Figma client connected (Active SSE listeners: ${sseClients.size})`);
 
-    // If there is an outstanding pending payload, deliver immediately
-    if (pendingFigmaPayload) {
+    const clientParam = parsedUrl.query?.client || '';
+    const isFigma = clientParam.includes('figma') || (req.headers['user-agent'] && req.headers['user-agent'].includes('Figma'));
+    if (isFigma) {
+      figmaSseClients.add(res);
+      console.log(`[Bridge SSE] Figma client connected (Active Figma SSE: ${figmaSseClients.size})`);
+      broadcastBridgeStatus();
+    } else {
+      webAppSseClients.add(res);
+      console.log(`[Bridge SSE] Web app client connected (Active Web App SSE: ${webAppSseClients.size})`);
+    }
+
+    // If there is an outstanding pending payload and this is a Figma client, deliver immediately
+    if (pendingFigmaPayload && isFigma) {
       res.write(`event: PUSH_TO_FIGMA\ndata: ${JSON.stringify({ type: 'PUSH_TO_FIGMA', payload: pendingFigmaPayload })}\n\n`);
     }
 
     req.on('close', () => {
       sseClients.delete(res);
-      console.log(`[Bridge SSE] Figma client disconnected (Active SSE listeners: ${sseClients.size})`);
+      if (isFigma) {
+        figmaSseClients.delete(res);
+        console.log(`[Bridge SSE] Figma client disconnected (Active Figma SSE: ${figmaSseClients.size})`);
+        broadcastBridgeStatus();
+      } else {
+        webAppSseClients.delete(res);
+      }
     });
     return;
   }
@@ -125,6 +168,7 @@ const server = http.createServer(async (req, res) => {
   // 2. Health check & status
   if (pathname === '/api/status' && req.method === 'GET') {
     const activePort = server.address() ? server.address().port : PORT;
+    const figmaCount = getFigmaClientsCount();
     res.writeHead(200, {
       'Content-Type': 'application/json',
       'Access-Control-Allow-Origin': '*',
@@ -134,7 +178,9 @@ const server = http.createServer(async (req, res) => {
       status: 'ok',
       port: activePort,
       bridge: 'active',
-      figmaClientsCount: sseClients.size + connectedWsClients.size,
+      figmaConnected: figmaCount > 0,
+      figmaClientsCount: figmaCount,
+      webAppClientsCount: webAppSseClients.size + webAppWsClients.size,
       sseListeners: sseClients.size,
       wsListeners: connectedWsClients.size,
       pendingCount: pendingFigmaPayload ? 1 : 0,
@@ -239,7 +285,336 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 8. Static file serving from public/
+  // --- Hybrid LLM Proxy Helpers & Endpoints ---
+  function executeHttpRequest(targetUrl, options, postData) {
+    return new Promise((resolve, reject) => {
+      const parsed = url.parse(targetUrl);
+      const isHttps = parsed.protocol === 'https:';
+      const client = isHttps ? https : http;
+
+      const reqOpts = {
+        protocol: parsed.protocol,
+        hostname: parsed.hostname,
+        port: parsed.port || (isHttps ? 443 : 80),
+        path: parsed.path,
+        method: options.method || 'GET',
+        headers: options.headers || {}
+      };
+
+      const req = client.request(reqOpts, (res) => {
+        let data = '';
+        res.on('data', chunk => { data += chunk; });
+        res.on('end', () => {
+          resolve({ statusCode: res.statusCode, data });
+        });
+      });
+
+      req.on('error', reject);
+      req.setTimeout(options.timeout || 30000, () => {
+        req.destroy();
+        reject(new Error('Request timed out after 30 seconds'));
+      });
+
+      if (postData) {
+        req.write(typeof postData === 'string' ? postData : JSON.stringify(postData));
+      }
+      req.end();
+    });
+  }
+
+  async function callLLMProvider({ provider, model, apiKey, baseUrl, prompt, systemPrompt, temperature = 0.2 }) {
+    const prov = (provider || 'gemini').toLowerCase();
+
+    if (prov === 'local') {
+      return {
+        success: true,
+        provider: 'local',
+        model: 'rule-based-engine',
+        text: `[Local Hybrid Engine response for: ${prompt.slice(0, 100)}]`
+      };
+    }
+
+    // 1. Google Gemini
+    if (prov === 'gemini') {
+      const key = apiKey || process.env.GEMINI_API_KEY;
+      if (!key) throw new Error('Gemini API key is required. Please enter your API key in AI settings.');
+      const targetModel = model || 'gemini-2.0-flash';
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(targetModel)}:generateContent?key=${encodeURIComponent(key)}`;
+
+      const body = {
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { temperature: Number(temperature) || 0.2 }
+      };
+      if (systemPrompt) {
+        body.systemInstruction = { parts: [{ text: systemPrompt }] };
+      }
+
+      const res = await executeHttpRequest(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      }, body);
+
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        let errMsg = `Gemini API error (HTTP ${res.statusCode})`;
+        try {
+          const errJson = JSON.parse(res.data);
+          if (errJson.error?.message) errMsg = errJson.error.message;
+        } catch (e) {}
+        throw new Error(errMsg);
+      }
+
+      const data = JSON.parse(res.data);
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      return { success: true, provider: 'gemini', model: targetModel, text };
+    }
+
+    // 2. OpenAI
+    if (prov === 'openai') {
+      const key = apiKey || process.env.OPENAI_API_KEY;
+      if (!key) throw new Error('OpenAI API key is required. Please enter your API key in AI settings.');
+      const targetModel = model || 'gpt-4o-mini';
+      const rootUrl = baseUrl ? baseUrl.replace(/\/+$/, '') : 'https://api.openai.com/v1';
+      const endpoint = `${rootUrl}/chat/completions`;
+
+      const messages = [];
+      if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+      messages.push({ role: 'user', content: prompt });
+
+      const body = {
+        model: targetModel,
+        messages,
+        temperature: Number(temperature) || 0.2
+      };
+
+      const res = await executeHttpRequest(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${key}`
+        }
+      }, body);
+
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        let errMsg = `OpenAI API error (HTTP ${res.statusCode})`;
+        try {
+          const errJson = JSON.parse(res.data);
+          if (errJson.error?.message) errMsg = errJson.error.message;
+        } catch (e) {}
+        throw new Error(errMsg);
+      }
+
+      const data = JSON.parse(res.data);
+      const text = data.choices?.[0]?.message?.content || '';
+      return { success: true, provider: 'openai', model: targetModel, text };
+    }
+
+    // 3. Anthropic Claude
+    if (prov === 'anthropic') {
+      const key = apiKey || process.env.ANTHROPIC_API_KEY;
+      if (!key) throw new Error('Anthropic API key is required. Please enter your API key in AI settings.');
+      const targetModel = model || 'claude-3-5-sonnet-20241022';
+      const endpoint = 'https://api.anthropic.com/v1/messages';
+
+      const body = {
+        model: targetModel,
+        max_tokens: 4096,
+        messages: [{ role: 'user', content: prompt }]
+      };
+      if (systemPrompt) body.system = systemPrompt;
+
+      const res = await executeHttpRequest(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01'
+        }
+      }, body);
+
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        let errMsg = `Anthropic API error (HTTP ${res.statusCode})`;
+        try {
+          const errJson = JSON.parse(res.data);
+          if (errJson.error?.message) errMsg = errJson.error.message;
+        } catch (e) {}
+        throw new Error(errMsg);
+      }
+
+      const data = JSON.parse(res.data);
+      const text = data.content?.[0]?.text || '';
+      return { success: true, provider: 'anthropic', model: targetModel, text };
+    }
+
+    // 4. Groq
+    if (prov === 'groq') {
+      const key = apiKey || process.env.GROQ_API_KEY;
+      if (!key) throw new Error('Groq API key is required. Please enter your API key in AI settings.');
+      const targetModel = model || 'llama-3.3-70b-versatile';
+      const endpoint = 'https://api.groq.com/openai/v1/chat/completions';
+
+      const messages = [];
+      if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+      messages.push({ role: 'user', content: prompt });
+
+      const body = {
+        model: targetModel,
+        messages,
+        temperature: Number(temperature) || 0.2
+      };
+
+      const res = await executeHttpRequest(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${key}`
+        }
+      }, body);
+
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        let errMsg = `Groq API error (HTTP ${res.statusCode})`;
+        try {
+          const errJson = JSON.parse(res.data);
+          if (errJson.error?.message) errMsg = errJson.error.message;
+        } catch (e) {}
+        throw new Error(errMsg);
+      }
+
+      const data = JSON.parse(res.data);
+      const text = data.choices?.[0]?.message?.content || '';
+      return { success: true, provider: 'groq', model: targetModel, text };
+    }
+
+    // 5. Ollama (Local)
+    if (prov === 'ollama') {
+      const targetModel = model || 'llama3.2';
+      const rootUrl = baseUrl ? baseUrl.replace(/\/+$/, '') : 'http://localhost:11434';
+      const endpoint = `${rootUrl}/api/chat`;
+
+      const messages = [];
+      if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+      messages.push({ role: 'user', content: prompt });
+
+      const body = {
+        model: targetModel,
+        messages,
+        stream: false
+      };
+
+      const res = await executeHttpRequest(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      }, body);
+
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        throw new Error(`Ollama returned HTTP ${res.statusCode}. Is Ollama running on ${rootUrl}?`);
+      }
+
+      const data = JSON.parse(res.data);
+      const text = data.message?.content || '';
+      return { success: true, provider: 'ollama', model: targetModel, text };
+    }
+
+    throw new Error(`Unsupported LLM provider: "${prov}"`);
+  }
+
+  // 8. LLM Status Check
+  if (pathname === '/api/llm/status' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      success: true,
+      mode: 'hybrid',
+      envKeysAvailable: {
+        gemini: Boolean(process.env.GEMINI_API_KEY),
+        openai: Boolean(process.env.OPENAI_API_KEY),
+        anthropic: Boolean(process.env.ANTHROPIC_API_KEY),
+        groq: Boolean(process.env.GROQ_API_KEY)
+      }
+    }));
+    return;
+  }
+
+  // 9. LLM Test Connection Endpoint
+  if (pathname === '/api/llm/test' && req.method === 'POST') {
+    const startTime = Date.now();
+    try {
+      const payload = await readRequestBody(req);
+      const { provider = 'gemini', model, apiKey, baseUrl } = payload;
+
+      if (provider === 'local') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          provider: 'local',
+          model: 'rule-based-engine',
+          latencyMs: 1,
+          message: '✓ Local deterministic engine ready (Offline Hybrid mode)'
+        }));
+        return;
+      }
+
+      const result = await callLLMProvider({
+        provider,
+        model,
+        apiKey,
+        baseUrl,
+        prompt: 'Say exactly: "Design System AI connected!" in 5 words or less.',
+        temperature: 0.1
+      });
+
+      const latencyMs = Date.now() - startTime;
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: true,
+        provider,
+        model: result.model,
+        latencyMs,
+        message: `✓ Connected to ${result.model} (${latencyMs}ms)`,
+        sample: result.text.trim()
+      }));
+    } catch (e) {
+      const latencyMs = Date.now() - startTime;
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: false,
+        latencyMs,
+        error: e.message || 'Connection test failed. Please verify your API key.'
+      }));
+    }
+    return;
+  }
+
+  // 10. LLM Generate Endpoint
+  if (pathname === '/api/llm/generate' && req.method === 'POST') {
+    try {
+      const payload = await readRequestBody(req);
+      const { provider, model, apiKey, baseUrl, prompt, systemPrompt, temperature } = payload;
+      
+      if (!prompt) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Prompt is required' }));
+        return;
+      }
+
+      const result = await callLLMProvider({
+        provider,
+        model,
+        apiKey,
+        baseUrl,
+        prompt,
+        systemPrompt,
+        temperature
+      });
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: e.message }));
+    }
+    return;
+  }
+
+  // 11. Static file serving from public/
   let filePath = path.join(PUBLIC_DIR, pathname === '/' ? 'index.html' : pathname);
   
   // Security check to avoid directory traversal
@@ -283,7 +658,19 @@ try {
     ws.on('message', (message) => {
       try {
         const data = JSON.parse(message.toString());
-        if (data.type === 'PUSH_TO_FIGMA' || data.type === 'SYNC_FIGMA_VARIABLES_AND_TOKENS') {
+        if (data.type === 'CLIENT_IDENTIFY') {
+          if (data.role === 'FIGMA_PLUGIN') {
+            ws._isFigma = true;
+            figmaWsClients.add(ws);
+            webAppWsClients.delete(ws);
+            console.log(`[Bridge WS] Figma Desktop Plugin identified! (Active Figma WS: ${figmaWsClients.size})`);
+            broadcastBridgeStatus();
+          } else {
+            ws._isFigma = false;
+            webAppWsClients.add(ws);
+            figmaWsClients.delete(ws);
+          }
+        } else if (data.type === 'PUSH_TO_FIGMA' || data.type === 'SYNC_FIGMA_VARIABLES_AND_TOKENS') {
           pendingFigmaPayload = data.payload;
           lastPushedComponentName = data.payload.component?.name || 'Component';
           console.log(`[Bridge WS] Received PUSH_TO_FIGMA for ${lastPushedComponentName}`);
@@ -300,7 +687,13 @@ try {
 
     ws.on('close', () => {
       connectedWsClients.delete(ws);
-      console.log('[Bridge WS] Client disconnected');
+      if (ws._isFigma) {
+        figmaWsClients.delete(ws);
+        console.log(`[Bridge WS] Figma Desktop Plugin disconnected (Remaining Figma WS: ${figmaWsClients.size})`);
+        broadcastBridgeStatus();
+      } else {
+        webAppWsClients.delete(ws);
+      }
     });
   });
 } catch (e) {

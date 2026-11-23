@@ -1,11 +1,168 @@
-/* AI Design System Creator - Anatomy Tree Styling */
+/* AI Design System Creator - Anatomy Hierarchy Modal & Tree Styling */
+
+/* Modal Backdrop */
+.adsc-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+  padding: 24px;
+  animation: anatomyModalFadeIn 0.16s ease-out;
+}
+
+@keyframes anatomyModalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes anatomyModalCardScale {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Modal Window Card */
+.adsc-modal-card.anatomy-manager-card {
+  width: 920px;
+  max-width: 95vw;
+  height: 640px;
+  max-height: 90vh;
+  background: var(--bg-window, #FFFFFF);
+  border: 1px solid var(--border-frame, #E2E8F0);
+  border-radius: 16px;
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: anatomyModalCardScale 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Modal Header */
+.anatomy-manager-card .adsc-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  background: var(--bg-surface, #F8FAFC);
+  border-bottom: 1px solid var(--border-subtle, #E2E8F0);
+  flex-shrink: 0;
+}
+
+.anatomy-manager-card .modal-title-wrap h3 {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-primary, #0F172A);
+  margin: 0 0 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.anatomy-manager-card .modal-subtitle {
+  font-size: 13px;
+  color: var(--text-secondary, #64748B);
+  margin: 0;
+}
+
+.anatomy-manager-card .modal-close-btn {
+  background: #FFFFFF;
+  border: 1px solid var(--border-subtle, #E2E8F0);
+  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary, #64748B);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 16px;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.anatomy-manager-card .modal-close-btn:hover {
+  background: #F1F5F9;
+  color: var(--text-primary, #0F172A);
+  border-color: #CBD5E1;
+}
+
+.anatomy-manager-card .modal-close-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Body 2-Column Split */
+.anatomy-modal-split {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Left Column: Structured Architecture Tree */
+.anatomy-tree-col {
+  flex: 1.15;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border-subtle, #E2E8F0);
+  background: #FFFFFF;
+}
+
+.anatomy-tree-col .col-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border-subtle, #E2E8F0);
+  background: #FFFFFF;
+  flex-shrink: 0;
+}
+
+.anatomy-tree-col .col-head h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #0F172A);
+  margin: 0;
+}
+
+#btn-add-anatomy-part {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 6px;
+  background: #F1F5F9;
+  border: 1px solid #E2E8F0;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+#btn-add-anatomy-part:hover {
+  background: #E2E8F0;
+  color: #0F172A;
+}
+
+#btn-add-anatomy-part svg {
+  width: 13px;
+  height: 13px;
+}
 
 .anatomy-tree-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 12px;
+  padding: 16px 20px;
 }
 
+/* Tree Nodes */
 .anatomy-tree-node {
   display: flex;
   flex-direction: column;
@@ -17,44 +174,49 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
-  background-color: var(--bg-elevated);
-  border: 1px solid var(--border-subtle);
-  margin-bottom: 4px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background-color: #FFFFFF;
+  border: 1px solid var(--border-subtle, #E2E8F0);
+  margin-bottom: 6px;
   cursor: pointer;
   transition: all 0.15s ease;
   position: relative;
 }
 
 .tree-node-row:hover {
-  border-color: var(--brand-primary);
-  background-color: var(--brand-surface);
+  border-color: #7C3AED;
+  background-color: rgba(124, 58, 237, 0.04);
 }
 
 .anatomy-tree-node.selected > .tree-node-row {
-  border-color: var(--brand-primary);
-  background-color: var(--brand-surface);
-  box-shadow: 0 0 0 2px var(--brand-border);
+  border-color: #7C3AED;
+  background-color: rgba(124, 58, 237, 0.08);
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2);
 }
 
 .tree-connector {
   width: 12px;
   height: 1px;
-  background-color: var(--border-strong);
+  background-color: #CBD5E1;
   display: inline-block;
 }
 
 .tree-node-icon {
   display: flex;
   align-items: center;
-  color: var(--text-secondary);
+  color: #64748B;
+}
+
+.tree-node-icon svg {
+  width: 15px;
+  height: 15px;
 }
 
 .tree-node-name {
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: #0F172A;
   flex: 1;
 }
 
@@ -62,23 +224,24 @@
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  padding: 1px 6px;
+  padding: 2px 7px;
   border-radius: 4px;
+  letter-spacing: 0.4px;
 }
 
-.type-frame { background-color: rgba(59, 130, 246, 0.15); color: #2563EB; }
-.type-text { background-color: rgba(16, 185, 129, 0.15); color: #059669; }
-.type-icon { background-color: rgba(162, 89, 255, 0.15); color: #9333EA; }
-.type-slot { background-color: rgba(236, 72, 153, 0.15); color: #DB2777; }
-.type-button { background-color: rgba(245, 158, 11, 0.15); color: #D97706; }
+.type-frame { background-color: rgba(59, 130, 246, 0.12); color: #2563EB; }
+.type-text { background-color: rgba(16, 185, 129, 0.12); color: #059669; }
+.type-icon { background-color: rgba(162, 89, 255, 0.12); color: #9333EA; }
+.type-slot { background-color: rgba(236, 72, 153, 0.12); color: #DB2777; }
+.type-button { background-color: rgba(245, 158, 11, 0.12); color: #D97706; }
 
 .tree-dir-pill {
   font-size: 10px;
-  font-family: var(--font-mono);
-  color: var(--text-tertiary);
-  background-color: var(--bg-secondary);
-  padding: 1px 4px;
-  border-radius: 3px;
+  font-family: var(--font-mono, monospace);
+  color: #64748B;
+  background-color: #F1F5F9;
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
 .tree-node-hover-actions {
@@ -95,41 +258,166 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 4px;
-  border: 1px solid var(--border-subtle);
-  background-color: var(--bg-elevated);
-  color: var(--text-secondary);
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid #E2E8F0;
+  background-color: #FFFFFF;
+  color: #64748B;
   cursor: pointer;
-  transition: all 0.1s ease;
+  transition: all 0.12s ease;
+  padding: 0;
 }
 
 .node-action-btn:hover {
-  background-color: var(--brand-primary);
+  background-color: #7C3AED;
   color: #FFFFFF;
-  border-color: var(--brand-primary);
+  border-color: #7C3AED;
+}
+
+.node-action-btn svg {
+  width: 12px;
+  height: 12px;
 }
 
 .tree-children-container {
-  padding-left: 20px;
-  border-left: 1px dashed var(--border-strong);
-  margin-left: 10px;
+  padding-left: 18px;
+  border-left: 2px dashed #E2E8F0;
+  margin-left: 14px;
   display: flex;
   flex-direction: column;
 }
 
+/* Right Column: Live Node Details & Inspector */
+.anatomy-node-col {
+  flex: 0.85;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface, #F8FAFC);
+  padding: 18px 24px;
+  overflow-y: auto;
+}
+
+.anatomy-node-col h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #0F172A);
+  margin: 0 0 16px 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle, #E2E8F0);
+  flex-shrink: 0;
+}
+
 .node-detail-content {
-  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+}
+
+.prop-config-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.anatomy-node-col .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.anatomy-node-col label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.anatomy-node-col .adsc-input,
+.anatomy-node-col .adsc-select {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 13px;
+  border: 1px solid #CBD5E1;
+  border-radius: 8px;
+  background: #FFFFFF;
+  color: #0F172A;
+  box-sizing: border-box;
+  outline: none;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.anatomy-node-col .adsc-input:focus,
+.anatomy-node-col .adsc-select:focus {
+  border-color: #7C3AED;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+}
+
+.anatomy-node-col .adsc-input:disabled {
+  background: #F1F5F9;
+  color: #94A3B8;
+  cursor: not-allowed;
+}
+
+.anatomy-node-col button[type="submit"] {
+  width: 100%;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #FFFFFF;
+  background: #7C3AED;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-top: 8px;
+}
+
+.anatomy-node-col button[type="submit"]:hover {
+  background: #6D28D9;
 }
 
 .hint-box {
-  background-color: var(--bg-secondary);
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius-sm);
-  padding: 16px;
-  font-size: 12px;
-  color: var(--text-tertiary);
+  background-color: #FFFFFF;
+  border: 1px dashed #CBD5E1;
+  border-radius: 10px;
+  padding: 24px 18px;
+  font-size: 13px;
+  color: #94A3B8;
   text-align: center;
-  line-height: 1.5;
+  line-height: 1.6;
+}
+
+/* Modal Bottom Actions Footer */
+.anatomy-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  background: var(--bg-surface, #F8FAFC);
+  border-top: 1px solid var(--border-subtle, #E2E8F0);
+  flex-shrink: 0;
+}
+
+.anatomy-modal-footer-hint {
+  font-size: 12px;
+  color: var(--text-secondary, #64748B);
+}
+
+.anatomy-modal-footer .adsc-btn.btn-primary {
+  padding: 8px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%);
+  color: #FFFFFF;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(124, 58, 237, 0.25);
+  transition: all 0.15s ease;
+}
+
+.anatomy-modal-footer .adsc-btn.btn-primary:hover {
+  background: #6D28D9;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.35);
 }

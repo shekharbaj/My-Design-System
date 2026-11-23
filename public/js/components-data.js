@@ -5642,7 +5642,7 @@ export const INITIAL_COMPONENTS = [
                                          {
                                              "id":  "main-text",
                                              "name":  "Label Layer",
-                                             "defaultText":  "Antigravity UI",
+                                             "defaultText":  "Button",
                                              "typography":  {
                                                                 "lineHeight":  20,
                                                                 "fontWeight":  "500",
@@ -5678,7 +5678,7 @@ export const INITIAL_COMPONENTS = [
                             "hasRightIcon":  false,
                             "variant":  "primary",
                             "tabIndex":  0,
-                            "label":  "Antigravity UI",
+                            "label":  "Button",
                             "onClick":  "handleClick",
                             "slotChild":  "CustomContentSlot",
                             "state":  "Rest",
@@ -5690,7 +5690,7 @@ export const INITIAL_COMPONENTS = [
                           "description":  "Primary text content",
                           "name":  "Label",
                           "id":  "label",
-                          "defaultValue":  "Antigravity UI",
+                          "defaultValue":  "Button",
                           "kind":  "text"
                       },
                       {

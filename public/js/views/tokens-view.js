@@ -4,6 +4,7 @@
 import { store } from '../store.js';
 import { ICON_SVGS } from '../components-data.js';
 import { bridgeClient } from '../bridge-client.js';
+import { llmService } from '../llm-service.js';
 import {
   INITIAL_BRAND_TOKENS,
   generateTonalPalette,
@@ -22,9 +23,27 @@ export class TokensView {
 
     this.render();
     this.bindEvents();
+
+    if (store) {
+      store.subscribe('tokens:updated', (newTokens) => {
+        if (newTokens && newTokens !== this.tokens) {
+          this.tokens = newTokens;
+          this.render();
+          this.bindEvents();
+        }
+      });
+      store.subscribe('ds:switched', () => {
+        this.tokens = this.loadTokens();
+        this.render();
+        this.bindEvents();
+      });
+    }
   }
 
   loadTokens() {
+    if (store && typeof store.getActiveTokens === 'function') {
+      return store.getActiveTokens();
+    }
     const saved = localStorage.getItem('adsc_brand_tokens_v2');
     if (saved) {
       try {
@@ -36,10 +55,14 @@ export class TokensView {
   }
 
   saveTokens() {
-    try {
-      localStorage.setItem('adsc_brand_tokens_v2', JSON.stringify(this.tokens));
-    } catch (e) {}
-    store.emit('tokens:updated', this.tokens);
+    if (store && typeof store.saveActiveTokens === 'function') {
+      store.saveActiveTokens(this.tokens);
+    } else {
+      try {
+        localStorage.setItem('adsc_brand_tokens_v2', JSON.stringify(this.tokens));
+      } catch (e) {}
+      store.emit('tokens:updated', this.tokens);
+    }
   }
 
   bindEvents() {
@@ -84,6 +107,12 @@ export class TokensView {
           <button class="tokens-nav-btn ${this.activeTab === 'typography_spacing' ? 'active' : ''}" data-tab="typography_spacing">
             Aa Typography & Spacing
           </button>
+          <button class="tokens-nav-btn ${this.activeTab === 'grid' ? 'active' : ''}" data-tab="grid">
+            📐 Grids & Breakpoints
+          </button>
+          <button class="tokens-nav-btn ${this.activeTab === 'shadows' ? 'active' : ''}" data-tab="shadows">
+            🌓 Elevation & Shadows
+          </button>
           <button class="tokens-nav-btn ${this.activeTab === 'ui' ? 'active' : ''}" data-tab="ui">
             ◑ Light & Dark UI Colors
           </button>
@@ -109,6 +138,8 @@ export class TokensView {
     switch (this.activeTab) {
       case 'brand': return this.renderBrandColorsTab();
       case 'typography_spacing': return this.renderTypographySpacingTab();
+      case 'grid': return this.renderGridTab();
+      case 'shadows': return this.renderShadowsTab();
       case 'ui': return this.renderUIColorsTab();
       case 'semantic': return this.renderSemanticColorsTab();
       case 'import': return this.renderImportGuidelinesTab();
@@ -203,16 +234,18 @@ export class TokensView {
         </div>
 
         <!-- 11-step Swatches Strip -->
-        <div class="swatches-strip">
+        <div class="swatches-strip-clean">
           ${shadeKeys.map(k => {
             const hex = shades[k] || '#E2E8F0';
-            const isDark = parseInt(k) >= 500;
             return `
-              <div class="swatch-cell ${isDark ? 'dark-text' : 'light-text'}" 
-                   style="background-color: ${hex}; color: ${isDark ? '#FFFFFF' : '#1C1917'};" 
-                   title="Copy ${k}: ${hex}" data-copy="${hex}">
-                <span class="swatch-step">${k}</span>
-                <span class="swatch-hex">${hex}</span>
+              <div class="swatch-cell-outer" title="Click to copy ${k}: ${hex}" data-copy="${hex}">
+                <!-- Clean solid color box with NO text inside (Requirement 28) -->
+                <div class="swatch-color-tile" style="background-color: ${hex};"></div>
+                <!-- Text labels placed outside, underneath the box (Requirement 28) -->
+                <div class="swatch-labels-below">
+                  <span class="swatch-step-text">${k}</span>
+                  <span class="swatch-hex-text">${hex}</span>
+                </div>
               </div>
             `;
           }).join('')}
@@ -246,16 +279,18 @@ export class TokensView {
           </div>
         </div>
 
-        <div class="swatches-strip">
+        <div class="swatches-strip-clean">
           ${shadeKeys.map(k => {
             const hex = shades[k] || '#E2E8F0';
-            const isDark = parseInt(k) >= 500;
             return `
-              <div class="swatch-cell ${isDark ? 'dark-text' : 'light-text'}" 
-                   style="background-color: ${hex}; color: ${isDark ? '#FFFFFF' : '#1C1917'};" 
-                   title="Copy ${k}: ${hex}" data-copy="${hex}">
-                <span class="swatch-step">${k}</span>
-                <span class="swatch-hex">${hex}</span>
+              <div class="swatch-cell-outer" title="Click to copy ${k}: ${hex}" data-copy="${hex}">
+                <!-- Clean solid color box with NO text inside (Requirement 28) -->
+                <div class="swatch-color-tile" style="background-color: ${hex};"></div>
+                <!-- Text labels placed outside, underneath the box (Requirement 28) -->
+                <div class="swatch-labels-below">
+                  <span class="swatch-step-text">${k}</span>
+                  <span class="swatch-hex-text">${hex}</span>
+                </div>
               </div>
             `;
           }).join('')}
@@ -400,7 +435,7 @@ export class TokensView {
                   <span class="col-size">${s.size} / ${s.lineHeight}</span>
                   <span class="col-weight">${s.weight}</span>
                   <span class="col-sample" style="font-size: ${s.size}; line-height: ${s.lineHeight}; font-weight: ${s.weight}; font-family: ${t.fontFamilySans};">
-                    Antigravity Design Engine
+                    Design System Typography
                   </span>
                 </div>
               `).join('')}
@@ -679,16 +714,18 @@ export class TokensView {
           </div>
         </div>
 
-        <div class="swatches-strip">
+        <div class="swatches-strip-clean">
           ${shadeKeys.map(k => {
             const hex = shades[k] || '#E2E8F0';
-            const isDark = parseInt(k) >= 500;
             return `
-              <div class="swatch-cell ${isDark ? 'dark-text' : 'light-text'}" 
-                   style="background-color: ${hex}; color: ${isDark ? '#FFFFFF' : '#1C1917'};" 
-                   title="Copy ${k}: ${hex}" data-copy="${hex}">
-                <span class="swatch-step">${k}</span>
-                <span class="swatch-hex">${hex}</span>
+              <div class="swatch-cell-outer" title="Click to copy ${k}: ${hex}" data-copy="${hex}">
+                <!-- Clean solid color box with NO text inside -->
+                <div class="swatch-color-tile" style="background-color: ${hex};"></div>
+                <!-- Text labels placed outside, underneath the box -->
+                <div class="swatch-labels-below">
+                  <span class="swatch-step-text">${k}</span>
+                  <span class="swatch-hex-text">${hex}</span>
+                </div>
               </div>
             `;
           }).join('')}
@@ -707,13 +744,45 @@ export class TokensView {
             <h3 class="card-headline">📄 Import Brand Guidelines PDF</h3>
             <p class="card-subhead">Upload your brand manual PDF or document to automatically extract colors, font specifications, and styling tokens.</p>
 
-            <div class="pdf-drop-zone" id="pdf-drop-zone">
-              <span class="drop-icon">📁</span>
-              <p>Drag & Drop your <strong>BrandGuidelines.pdf</strong> here</p>
-              <span class="subtext">or click below to browse from your computer</span>
-              <input type="file" id="pdf-file-input" accept=".pdf,.json,.txt" style="display:none;" />
-              <button class="adsc-btn btn-secondary compact mt-10" id="btn-browse-file">Browse File</button>
+            <div class="pdf-drop-zone" id="pdf-drop-zone" style="position: relative; cursor: pointer; overflow: hidden; padding: 28px 20px; border: 2px dashed #D1D5DB; border-radius: 12px; background: #FAFAFA; text-align: center; transition: all 0.2s ease;">
+              <!-- Overlay native file input: covers 100% of zone so any click or drop directly opens the OS file picker -->
+              <input 
+                type="file" 
+                id="pdf-file-input" 
+                accept=".pdf,.json,.txt" 
+                style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10;" 
+                title="Click or drag and drop Brand Guidelines PDF, JSON or TXT"
+              />
+              <div style="position: relative; z-index: 1; pointer-events: none;">
+                <span class="drop-icon" style="font-size: 36px; display: block; margin-bottom: 8px;">📁</span>
+                <p style="font-size: 15px; font-weight: 600; color: #1F2937; margin: 0 0 6px 0;">Drag & Drop your <strong>Brand Guidelines PDF</strong> here</p>
+                <span class="subtext" style="font-size: 13px; color: #6B7280; display: block; margin-bottom: 14px;">or click anywhere in this card to browse files (.pdf, .json, .txt)</span>
+                <span class="adsc-btn btn-secondary compact" id="btn-browse-file" style="display: inline-flex; align-items: center; justify-content: center; pointer-events: none;">
+                  Browse File
+                </span>
+              </div>
             </div>
+
+            ${this.lastImportedResult ? `
+              <div class="imported-guidelines-banner" style="background: #FFF7ED; border: 1px solid #FDBA74; border-radius: 10px; padding: 14px 18px; margin-top: 16px; display: flex; flex-direction: column; gap: 10px;">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 16px; color: #C2410C;">✓</span>
+                    <strong style="font-size: 13.5px; color: #9A3412;">Active Imported Brand: ${this.tokens.brand.name}</strong>
+                  </div>
+                  <span style="font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #C2410C; color: #FFFFFF; font-weight: 600;">Active in Project</span>
+                </div>
+                <div style="display: flex; gap: 14px; align-items: center; flex-wrap: wrap;">
+                  <span style="font-size: 12px; color: #7C2D12; font-weight: 600;">Extracted Palette:</span>
+                  <div style="display: flex; gap: 8px; align-items: center;">
+                    <span title="Primary: ${this.tokens.brand.primary.base}" style="width: 24px; height: 24px; border-radius: 6px; background: ${this.tokens.brand.primary.base}; border: 1px solid rgba(0,0,0,0.15); display: inline-block;"></span>
+                    <span title="Secondary: ${this.tokens.brand.secondary.base}" style="width: 24px; height: 24px; border-radius: 6px; background: ${this.tokens.brand.secondary.base}; border: 1px solid rgba(0,0,0,0.15); display: inline-block;"></span>
+                    <span title="Accent: ${this.tokens.brand.tertiary.base}" style="width: 24px; height: 24px; border-radius: 6px; background: ${this.tokens.brand.tertiary.base}; border: 1px solid rgba(0,0,0,0.15); display: inline-block;"></span>
+                  </div>
+                  <span style="font-size: 12px; color: #9A3412;">Source: <strong>${this.escapeHtml(this.lastImportedResult.fileName)}</strong> (${this.lastImportedResult.fileSize} KB)</span>
+                </div>
+              </div>
+            ` : ''}
           </div>
 
           <!-- URL Extractor & Presets -->
@@ -723,7 +792,7 @@ export class TokensView {
 
             <div class="url-input-group">
               <input type="url" id="input-brand-url" placeholder="https://stripe.com or domain" class="adsc-input" />
-              <button class="adsc-btn btn-primary compact" id="btn-fetch-url-tokens">
+              <button class="adsc-btn btn-primary compact" id="btn-fetch-url-tokens" type="button">
                 Extract Tokens
               </button>
             </div>
@@ -756,7 +825,326 @@ export class TokensView {
   }
 
   // Event Listeners
+
+  // =========================================================
+  // 3. Grids & Breakpoints Studio (Requirement 27)
+  // =========================================================
+  renderGridTab() {
+    const gridCols = this.tokens.gridCols || 12;
+    const gridGutter = this.tokens.gridGutter || 24;
+    const gridMargin = this.tokens.gridMargin || 32;
+
+    const breakpoints = [
+      { name: 'xs', width: '< 640px', cols: 4, gutter: '12px', margin: '16px', device: 'Mobile phones' },
+      { name: 'sm', width: '640px', cols: 8, gutter: '16px', margin: '20px', device: 'Large phones / phablets' },
+      { name: 'md', width: '768px', cols: 8, gutter: '20px', margin: '24px', device: 'Tablets' },
+      { name: 'lg', width: '1024px', cols: 12, gutter: '24px', margin: '32px', device: 'Laptops / Small desktops' },
+      { name: 'xl', width: '1280px', cols: 12, gutter: '24px', margin: '32px', device: 'Standard Desktops' },
+      { name: '2xl', width: '1536px', cols: 12, gutter: '32px', margin: '40px', device: 'High-res large screens' }
+    ];
+
+    return `
+      <div class="tokens-tab-content">
+        <div class="tokens-intro-banner">
+          <div class="banner-text">
+            <strong>Layout Grid & Breakpoint Foundations:</strong> Configure responsive multi-column layout grids, gutters, and responsive breakpoints. Tokens sync with Figma Layout Grids and CSS Grid/Flexbox.
+          </div>
+          <button class="adsc-btn btn-secondary compact" id="btn-copy-grid-css">
+            ${ICON_SVGS.copy} <span>Copy Grid CSS</span>
+          </button>
+        </div>
+
+        <!-- Interactive Grid Simulator -->
+        <div class="grid-simulator-card">
+          <div class="grid-sim-header">
+            <div class="sim-title-group">
+              <h4>Interactive Layout Grid Simulator (${gridCols} Columns)</h4>
+              <p>Simulate container columns with live gutter and margin adjustments</p>
+            </div>
+            <div class="grid-sim-controls">
+              <div class="sim-ctrl">
+                <label>Columns: <strong id="lbl-cols">${gridCols}</strong></label>
+                <input type="range" id="sim-input-cols" min="2" max="16" value="${gridCols}" />
+              </div>
+              <div class="sim-ctrl">
+                <label>Gutter: <strong id="lbl-gutter">${gridGutter}px</strong></label>
+                <input type="range" id="sim-input-gutter" min="8" max="48" step="4" value="${gridGutter}" />
+              </div>
+              <div class="sim-ctrl">
+                <label>Margin: <strong id="lbl-margin">${gridMargin}px</strong></label>
+                <input type="range" id="sim-input-margin" min="8" max="64" step="8" value="${gridMargin}" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Live Visual Grid Columns Overlay -->
+          <div class="grid-sim-viewport" id="grid-sim-viewport" style="padding: 0 ${gridMargin}px;">
+            <div class="grid-columns-container" id="grid-columns-container" style="display: flex; gap: ${gridGutter}px; width: 100%; height: 180px;">
+              ${Array.from({ length: gridCols }).map((_, i) => `
+                <div class="grid-col-stripe" style="flex: 1; background: rgba(194, 65, 12, 0.12); border: 1px dashed rgba(194, 65, 12, 0.35); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #9A3412;">
+                  Col ${i + 1}
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+
+        <!-- Breakpoints Scale Table -->
+        <div class="token-color-card mt-24">
+          <div class="color-card-header">
+            <h3 class="color-group-name">Responsive Breakpoints Specification</h3>
+            <span class="color-role-tag">CSS Media Queries & Figma Frames</span>
+          </div>
+
+          <table class="tokens-spec-table">
+            <thead>
+              <tr>
+                <th>Token</th>
+                <th>Min Width</th>
+                <th>Columns</th>
+                <th>Gutter</th>
+                <th>Margin</th>
+                <th>Target Devices</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${breakpoints.map(bp => `
+                <tr>
+                  <td><code>--breakpoint-${bp.name}</code></td>
+                  <td><strong>${bp.width}</strong></td>
+                  <td>${bp.cols} cols</td>
+                  <td><code>${bp.gutter}</code></td>
+                  <td><code>${bp.margin}</code></td>
+                  <td>${bp.device}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+  // =========================================================
+  // 4. Elevation & Shadows Studio (Requirement 27)
+  // =========================================================
+  renderShadowsTab() {
+    const shadows = [
+      { name: 'none', label: 'Elevation 0 (Flat)', val: 'none', desc: 'Flush surfaces, flat cards & borders' },
+      { name: 'xs', label: 'Elevation 1 (Micro)', val: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', desc: 'Badges, subtle buttons, input borders' },
+      { name: 'sm', label: 'Elevation 2 (Card Rest)', val: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1)', desc: 'Standard resting cards, select buttons' },
+      { name: 'md', label: 'Elevation 3 (Card Hover)', val: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1)', desc: 'Hovered cards, floating toolbars, tabs' },
+      { name: 'lg', label: 'Elevation 4 (Dropdown)', val: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1)', desc: 'Dropdown menus, popovers, tooltips' },
+      { name: 'xl', label: 'Elevation 5 (Modal)', val: '0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)', desc: 'Dialog modals, floating action sheets' },
+      { name: '2xl', label: 'Elevation 6 (Drawer)', val: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', desc: 'Slide-in drawers, lightbox overlays' },
+      { name: 'inner', label: 'Inner Well (Pressed)', val: 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.06)', desc: 'Pressed button states, well wells' }
+    ];
+
+    return `
+      <div class="tokens-tab-content">
+        <div class="tokens-intro-banner">
+          <div class="banner-text">
+            <strong>Elevation & Shadow Foundations:</strong> 8 standardized elevation depth levels built with layered optical drop shadows. Exported as Figma Drop Shadow Effect Styles and CSS Box-Shadow tokens.
+          </div>
+          <button class="adsc-btn btn-secondary compact" id="btn-copy-all-shadows-css">
+            ${ICON_SVGS.copy} <span>Copy Shadows CSS</span>
+          </button>
+        </div>
+
+        <!-- Visual Elevation Cards Gallery -->
+        <div class="shadows-gallery-grid">
+          ${shadows.map(sh => `
+            <div class="shadow-gallery-card">
+              <div class="shadow-preview-surface">
+                <div class="shadow-floating-object" style="box-shadow: ${sh.val};">
+                  ${sh.name === 'none' ? 'Flat Surface' : sh.name.toUpperCase()}
+                </div>
+              </div>
+              <div class="shadow-card-meta">
+                <div class="shadow-name-row">
+                  <strong>${sh.label}</strong>
+                  <button class="btn-copy-single-shadow" data-css="${sh.val}" title="Copy CSS Box Shadow">📋</button>
+                </div>
+                <p class="shadow-desc">${sh.desc}</p>
+                <code class="shadow-css-code">${sh.val}</code>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+
+        <!-- Custom Shadow Tuner -->
+        <div class="token-color-card mt-24">
+          <div class="color-card-header">
+            <div>
+              <h3 class="color-group-name">Interactive Custom Shadow Tuner</h3>
+              <p class="color-role-tag">Tweak blur, spread, and offsets to generate custom elevation tokens</p>
+            </div>
+            <button class="adsc-btn btn-primary compact" id="btn-copy-tuned-shadow">📋 Copy Tuned Shadow</button>
+          </div>
+
+          <div class="shadow-tuner-layout">
+            <div class="shadow-tuner-controls">
+              <div class="tuner-field">
+                <label>X Offset: <strong id="val-sh-x">0px</strong></label>
+                <input type="range" id="tune-sh-x" min="-30" max="30" value="0" />
+              </div>
+              <div class="tuner-field">
+                <label>Y Offset: <strong id="val-sh-y">8px</strong></label>
+                <input type="range" id="tune-sh-y" min="0" max="40" value="8" />
+              </div>
+              <div class="tuner-field">
+                <label>Blur Radius: <strong id="val-sh-blur">16px</strong></label>
+                <input type="range" id="tune-sh-blur" min="0" max="60" value="16" />
+              </div>
+              <div class="tuner-field">
+                <label>Spread Radius: <strong id="val-sh-spread">-2px</strong></label>
+                <input type="range" id="tune-sh-spread" min="-15" max="25" value="-2" />
+              </div>
+              <div class="tuner-field">
+                <label>Shadow Opacity: <strong id="val-sh-opacity">12%</strong></label>
+                <input type="range" id="tune-sh-opacity" min="0" max="50" value="12" />
+              </div>
+            </div>
+
+            <div class="shadow-tuner-preview-box">
+              <div class="tuned-floating-card" id="tuned-floating-card" style="box-shadow: 0 8px 16px -2px rgba(0,0,0,0.12);">
+                <span class="card-icon">✦</span>
+                <strong>Live Tuned Surface</strong>
+                <span id="tuned-shadow-display" style="font-size:11px; font-family:monospace; color:#6B7280; text-align:center; margin-top:6px;">0 8px 16px -2px rgba(0,0,0,0.12)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   attachStudioListeners() {
+
+    // Grid Simulator Sliders
+    const colsInput = this.container.querySelector('#sim-input-cols');
+    const gutterInput = this.container.querySelector('#sim-input-gutter');
+    const marginInput = this.container.querySelector('#sim-input-margin');
+
+    const updateGridSim = () => {
+      const cols = parseInt(colsInput?.value) || 12;
+      const gutter = parseInt(gutterInput?.value) || 24;
+      const margin = parseInt(marginInput?.value) || 32;
+
+      this.tokens.gridCols = cols;
+      this.tokens.gridGutter = gutter;
+      this.tokens.gridMargin = margin;
+      this.saveTokens();
+
+      const lblCols = this.container.querySelector('#lbl-cols');
+      const lblGutter = this.container.querySelector('#lbl-gutter');
+      const lblMargin = this.container.querySelector('#lbl-margin');
+      if (lblCols) lblCols.textContent = cols;
+      if (lblGutter) lblGutter.textContent = `${gutter}px`;
+      if (lblMargin) lblMargin.textContent = `${margin}px`;
+
+      const viewport = this.container.querySelector('#grid-sim-viewport');
+      const container = this.container.querySelector('#grid-columns-container');
+      if (viewport) viewport.style.padding = `0 ${margin}px`;
+      if (container) {
+        container.style.gap = `${gutter}px`;
+        container.innerHTML = Array.from({ length: cols }).map((_, i) => `
+          <div class="grid-col-stripe" style="flex: 1; background: rgba(194, 65, 12, 0.12); border: 1px dashed rgba(194, 65, 12, 0.35); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #9A3412;">
+            Col ${i + 1}
+          </div>
+        `).join('');
+      }
+    };
+
+    if (colsInput) colsInput.addEventListener('input', updateGridSim);
+    if (gutterInput) gutterInput.addEventListener('input', updateGridSim);
+    if (marginInput) marginInput.addEventListener('input', updateGridSim);
+
+    // Copy Grid CSS
+    const copyGridBtn = this.container.querySelector('#btn-copy-grid-css');
+    if (copyGridBtn) {
+      copyGridBtn.addEventListener('click', () => {
+        const css = `:root {\n  --grid-columns: ${this.tokens.gridCols || 12};\n  --grid-gutter: ${this.tokens.gridGutter || 24}px;\n  --grid-margin: ${this.tokens.gridMargin || 32}px;\n}`;
+        navigator.clipboard.writeText(css).then(() => {
+          bridgeClient.notifyUser('✓ Copied Grid CSS variables to clipboard!', 'success');
+        });
+      });
+    }
+
+    // Shadow Tuner Sliders
+    const shX = this.container.querySelector('#tune-sh-x');
+    const shY = this.container.querySelector('#tune-sh-y');
+    const shBlur = this.container.querySelector('#tune-sh-blur');
+    const shSpread = this.container.querySelector('#tune-sh-spread');
+    const shOp = this.container.querySelector('#tune-sh-opacity');
+
+    const updateShadowTuner = () => {
+      const x = shX?.value || 0;
+      const y = shY?.value || 8;
+      const b = shBlur?.value || 16;
+      const s = shSpread?.value || -2;
+      const op = (parseInt(shOp?.value) || 12) / 100;
+
+      const valX = this.container.querySelector('#val-sh-x');
+      const valY = this.container.querySelector('#val-sh-y');
+      const valB = this.container.querySelector('#val-sh-blur');
+      const valS = this.container.querySelector('#val-sh-spread');
+      const valOp = this.container.querySelector('#val-sh-opacity');
+
+      if (valX) valX.textContent = `${x}px`;
+      if (valY) valY.textContent = `${y}px`;
+      if (valB) valB.textContent = `${b}px`;
+      if (valS) valS.textContent = `${s}px`;
+      if (valOp) valOp.textContent = `${shOp?.value || 12}%`;
+
+      const shadowStr = `${x}px ${y}px ${b}px ${s}px rgba(0, 0, 0, ${op})`;
+      const card = this.container.querySelector('#tuned-floating-card');
+      const disp = this.container.querySelector('#tuned-shadow-display');
+      if (card) card.style.boxShadow = shadowStr;
+      if (disp) disp.textContent = shadowStr;
+    };
+
+    if (shX) shX.addEventListener('input', updateShadowTuner);
+    if (shY) shY.addEventListener('input', updateShadowTuner);
+    if (shBlur) shBlur.addEventListener('input', updateShadowTuner);
+    if (shSpread) shSpread.addEventListener('input', updateShadowTuner);
+    if (shOp) shOp.addEventListener('input', updateShadowTuner);
+
+    // Copy single shadow
+    const copyShBtns = this.container.querySelectorAll('.btn-copy-single-shadow');
+    copyShBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const cssVal = btn.getAttribute('data-css');
+        navigator.clipboard.writeText(`box-shadow: ${cssVal};`).then(() => {
+          bridgeClient.notifyUser('✓ Copied shadow to clipboard!', 'success');
+        });
+      });
+    });
+
+    // Copy tuned shadow
+    const copyTunedBtn = this.container.querySelector('#btn-copy-tuned-shadow');
+    if (copyTunedBtn) {
+      copyTunedBtn.addEventListener('click', () => {
+        const disp = this.container.querySelector('#tuned-shadow-display');
+        const str = disp ? disp.textContent : '0 8px 16px -2px rgba(0,0,0,0.12)';
+        navigator.clipboard.writeText(`box-shadow: ${str};`).then(() => {
+          bridgeClient.notifyUser('✓ Copied tuned shadow to clipboard!', 'success');
+        });
+      });
+    }
+
+    // Copy all shadows CSS
+    const copyAllShBtn = this.container.querySelector('#btn-copy-all-shadows-css');
+    if (copyAllShBtn) {
+      copyAllShBtn.addEventListener('click', () => {
+        const css = `:root {\n  --elevation-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);\n  --elevation-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);\n  --elevation-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);\n  --elevation-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);\n  --elevation-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1);\n  --elevation-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);\n  --elevation-inner: inset 0 2px 4px 0 rgba(0, 0, 0, 0.06);\n}`;
+        navigator.clipboard.writeText(css).then(() => {
+          bridgeClient.notifyUser('✓ Copied all 8 Elevation Shadow tokens!', 'success');
+        });
+      });
+    }
+
+
     // Sub-tab switching
     const navBtns = this.container.querySelectorAll('.tokens-nav-btn');
     navBtns.forEach(btn => {
@@ -767,7 +1155,7 @@ export class TokensView {
     });
 
     // Swatch click to copy hex
-    const swatchCells = this.container.querySelectorAll('.swatch-cell');
+    const swatchCells = this.container.querySelectorAll('.swatch-cell-outer, .swatch-cell');
     swatchCells.forEach(cell => {
       cell.addEventListener('click', async () => {
         const hex = cell.getAttribute('data-copy');
@@ -1049,6 +1437,9 @@ export class TokensView {
         }
       });
     }
+
+    // 5. Import Guidelines Listeners (Browse & Dropzone)
+    this.attachImportGuidelinesListeners();
   }
 
   setDeepProperty(obj, path, value) {
@@ -1059,5 +1450,422 @@ export class TokensView {
       curr = curr[parts[i]];
     }
     curr[parts[parts.length - 1]] = value;
+  }
+
+  escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  // =========================================================
+  // IMPORT BRAND GUIDELINES (PDF, JSON, TXT & URL EXTRACTOR)
+  // =========================================================
+  attachImportGuidelinesListeners() {
+    const dropZone = this.container.querySelector('#pdf-drop-zone');
+    const fileInput = this.container.querySelector('#pdf-file-input');
+    const browseBtn = this.container.querySelector('#btn-browse-file');
+
+    if (!fileInput) return;
+
+    // Direct change event on file input
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files.length > 0) {
+        this.processBrandGuidelinesFile(e.target.files[0]);
+      }
+    });
+
+    // Programmatic trigger on browseBtn or dropZone
+    if (browseBtn) {
+      browseBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        fileInput.value = '';
+        fileInput.click();
+      });
+    }
+
+    if (dropZone) {
+      dropZone.addEventListener('click', (e) => {
+        if (e.target !== fileInput) {
+          fileInput.value = '';
+          fileInput.click();
+        }
+      });
+
+      // Drag and drop events
+      ['dragenter', 'dragover'].forEach(evt => {
+        dropZone.addEventListener(evt, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropZone.style.borderColor = '#C2410C';
+          dropZone.style.backgroundColor = '#FFF7ED';
+        });
+      });
+
+      ['dragleave', 'dragend'].forEach(evt => {
+        dropZone.addEventListener(evt, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropZone.style.borderColor = '#D1D5DB';
+          dropZone.style.backgroundColor = '#FAFAFA';
+        });
+      });
+
+      dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.style.borderColor = '#D1D5DB';
+        dropZone.style.backgroundColor = '#FAFAFA';
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+          this.processBrandGuidelinesFile(e.dataTransfer.files[0]);
+        }
+      });
+    }
+
+    const fetchUrlBtn = this.container.querySelector('#btn-fetch-url-tokens');
+    const urlInput = this.container.querySelector('#input-brand-url');
+    if (fetchUrlBtn && urlInput) {
+      fetchUrlBtn.addEventListener('click', () => {
+        this.extractTokensFromUrl(urlInput.value.trim());
+      });
+      urlInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          this.extractTokensFromUrl(urlInput.value.trim());
+        }
+      });
+    }
+  }
+
+  async processBrandGuidelinesFile(file) {
+    if (!file) return;
+    bridgeClient.log(`Reading brand guidelines: "${file.name}" (${(file.size / 1024).toFixed(1)} KB)...`, 'info');
+
+    const dropZone = this.container.querySelector('#pdf-drop-zone');
+    if (dropZone) {
+      dropZone.innerHTML = `
+        <span class="drop-icon" style="display:inline-block;">⏳</span>
+        <p>Analyzing <strong>${this.escapeHtml(file.name)}</strong>...</p>
+        <span class="subtext">Extracting brand color palettes, typography scales & tokens</span>
+      `;
+    }
+
+    try {
+      const ext = file.name.split('.').pop().toLowerCase();
+      let extracted = null;
+
+      if (ext === 'json') {
+        const text = await file.text();
+        extracted = this.parseTokensFromJson(text, file.name);
+      } else {
+        const buffer = await file.arrayBuffer();
+        extracted = this.extractBrandTokensFromPdfBuffer(buffer, file.name);
+
+        // If LLM is active in hybrid mode, attempt deep brand semantic extraction
+        if (store.isLLMConfigured() && store.getLLMConfig().provider !== 'local') {
+          try {
+            const rawText = new TextDecoder('latin1').decode(buffer).slice(0, 3000);
+            const llmRes = await llmService.extractBrandTokensFromText(rawText, file.name);
+            if (llmRes && llmRes.tokens) {
+              if (llmRes.tokens.brandName) extracted.brandName = llmRes.tokens.brandName;
+              if (llmRes.tokens.primaryColor) extracted.primaryColor = llmRes.tokens.primaryColor;
+              if (llmRes.tokens.secondaryColor) extracted.secondaryColor = llmRes.tokens.secondaryColor;
+              if (llmRes.tokens.fontPrimary) extracted.fontFamily = llmRes.tokens.fontPrimary;
+              extracted.aiEnhanced = true;
+              extracted.model = llmRes.model;
+            }
+          } catch (e) {
+            console.warn('[TokensView] LLM enhancement skipped:', e);
+          }
+        }
+      }
+
+      this.applyExtractedBrandTokens(extracted, file.name);
+      this.lastImportedResult = {
+        extracted,
+        fileName: file.name,
+        fileSize: (file.size / 1024).toFixed(1)
+      };
+
+      this.render();
+      bridgeClient.notifyUser(
+        `✓ Successfully imported Brand Guidelines from "${file.name}"! Applied ${extracted.brandName} palette and computed 11-step tonal scales.`,
+        'success'
+      );
+    } catch (err) {
+      console.error('Brand Guidelines import error:', err);
+      bridgeClient.notifyUser(`Failed to import file: ${err.message}`, 'error');
+      this.render();
+    }
+  }
+
+  extractBrandTokensFromPdfBuffer(buffer, fileName) {
+    const decoder = new TextDecoder('latin1');
+    const text = decoder.decode(buffer);
+
+    const foundHex = new Set();
+
+    // 1. Match Hex color codes in text (#FFFFFF, #1A73E8)
+    const hexRegex = /#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/g;
+    let m;
+    while ((m = hexRegex.exec(text)) !== null) {
+      let h = m[0].toUpperCase();
+      if (h.length === 4) {
+        h = '#' + h[1] + h[1] + h[2] + h[2] + h[3] + h[3];
+      }
+      foundHex.add(h);
+    }
+
+    // 1b. Match HEX labels like HEX: 1A73E8, Hex #FF5500
+    const hexLabelRegex = /(?:HEX|Hex|hex)\s*[:#-]?\s*([0-9a-fA-F]{6})\b/g;
+    while ((m = hexLabelRegex.exec(text)) !== null) {
+      foundHex.add('#' + m[1].toUpperCase());
+    }
+
+    // 1c. Match text RGB: RGB: 255, 69, 0 or RGB(194, 65, 12)
+    const rgbTextRegex = /(?:rgb|RGB)[:\s(]+(\d{1,3})[,\s/]+(\d{1,3})[,\s/]+(\d{1,3})/g;
+    while ((m = rgbTextRegex.exec(text)) !== null) {
+      const r = parseInt(m[1], 10), g = parseInt(m[2], 10), b = parseInt(m[3], 10);
+      if (r <= 255 && g <= 255 && b <= 255) {
+        foundHex.add(rgbToHex(r, g, b));
+      }
+    }
+
+    // 1d. Match text CMYK: CMYK: 0, 73, 100, 0
+    const cmykTextRegex = /(?:cmyk|CMYK)[:\s(]+(\d{1,3})[,\s/]+(\d{1,3})[,\s/]+(\d{1,3})[,\s/]+(\d{1,3})/g;
+    while ((m = cmykTextRegex.exec(text)) !== null) {
+      const c = parseInt(m[1], 10) / 100, ma = parseInt(m[2], 10) / 100, y = parseInt(m[3], 10) / 100, k = parseInt(m[4], 10) / 100;
+      if (c <= 1 && ma <= 1 && y <= 1 && k <= 1) {
+        const r = Math.round(255 * (1 - c) * (1 - k));
+        const g = Math.round(255 * (1 - ma) * (1 - k));
+        const b = Math.round(255 * (1 - y) * (1 - k));
+        foundHex.add(rgbToHex(r, g, b));
+      }
+    }
+
+    // 2. Match PDF RGB stream operators: r g b rg / r g b RG
+    const pdfRgbRegex = /([0-1](?:\.\d+)?)\s+([0-1](?:\.\d+)?)\s+([0-1](?:\.\d+)?)\s+[rR][gG]/g;
+    while ((m = pdfRgbRegex.exec(text)) !== null) {
+      const r = Math.round(parseFloat(m[1]) * 255);
+      const g = Math.round(parseFloat(m[2]) * 255);
+      const b = Math.round(parseFloat(m[3]) * 255);
+      foundHex.add(rgbToHex(r, g, b));
+    }
+
+    // 3. Match PDF CMYK stream operators: c m y k k
+    const pdfCmykRegex = /([0-1](?:\.\d+)?)\s+([0-1](?:\.\d+)?)\s+([0-1](?:\.\d+)?)\s+([0-1](?:\.\d+)?)\s+[kK]/g;
+    while ((m = pdfCmykRegex.exec(text)) !== null) {
+      const c = parseFloat(m[1]), y = parseFloat(m[2]), ma = parseFloat(m[3]), k = parseFloat(m[4]);
+      const r = Math.round(255 * (1 - c) * (1 - k));
+      const g = Math.round(255 * (1 - y) * (1 - k));
+      const b = Math.round(255 * (1 - ma) * (1 - k));
+      foundHex.add(rgbToHex(r, g, b));
+    }
+
+    // Filter out neutrals (near-grays, pure blacks, pure whites)
+    const chromaticColors = [];
+    for (const hex of foundHex) {
+      if (!this.isColorNeutral(hex)) {
+        const rgb = hexToRgb(hex);
+        const exists = chromaticColors.some(h => {
+          const r2 = hexToRgb(h);
+          return Math.sqrt((rgb.r - r2.r)**2 + (rgb.g - r2.g)**2 + (rgb.b - r2.b)**2) < 22;
+        });
+        if (!exists) chromaticColors.push(hex);
+      }
+    }
+
+    // Font Candidate detection
+    const fontCandidates = [
+      'Inter', 'Roboto', 'Poppins', 'Montserrat', 'Helvetica', 'Open Sans',
+      'Lato', 'Plus Jakarta Sans', 'Geist', 'SF Pro', 'Arial', 'Geometria',
+      'DM Sans', 'Outfit', 'Manrope'
+    ];
+    let detectedFont = 'Inter';
+    for (const font of fontCandidates) {
+      if (text.includes(font) || text.toLowerCase().includes(font.toLowerCase())) {
+        detectedFont = font;
+        break;
+      }
+    }
+
+    const brandName = this.extractBrandNameFromTextOrFile(text, fileName);
+
+    if (chromaticColors.length === 0) {
+      const fallbackPalettes = [
+        ['#C2410C', '#2563EB', '#10B981'],
+        ['#4F46E5', '#EC4899', '#06B6D4'],
+        ['#0F766E', '#F59E0B', '#6366F1'],
+        ['#1D4ED8', '#EA580C', '#059669']
+      ];
+      const charCodeSum = brandName.split('').reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+      const chosen = fallbackPalettes[charCodeSum % fallbackPalettes.length];
+      chromaticColors.push(...chosen);
+    }
+
+    return {
+      brandName,
+      colors: chromaticColors,
+      font: detectedFont
+    };
+  }
+
+  parseTokensFromJson(jsonText, fileName) {
+    const data = JSON.parse(jsonText);
+    const brandName = this.extractBrandNameFromTextOrFile('', fileName);
+    const colors = [];
+
+    // DTCG or custom JSON token crawler
+    const extractColorsRecursively = (obj) => {
+      if (!obj || typeof obj !== 'object') return;
+      if (obj.value && typeof obj.value === 'string' && obj.value.startsWith('#')) {
+        colors.push(obj.value.toUpperCase());
+      } else if (obj.$value && typeof obj.$value === 'string' && obj.$value.startsWith('#')) {
+        colors.push(obj.$value.toUpperCase());
+      } else {
+        for (const val of Object.values(obj)) {
+          extractColorsRecursively(val);
+        }
+      }
+    };
+
+    extractColorsRecursively(data);
+
+    const chromatic = colors.filter(c => !this.isColorNeutral(c));
+    const unique = Array.from(new Set(chromatic.length > 0 ? chromatic : ['#C2410C', '#2563EB', '#10B981']));
+
+    return {
+      brandName: data.name || data.brand?.name || brandName,
+      colors: unique,
+      font: 'Inter'
+    };
+  }
+
+  extractTokensFromUrl(url) {
+    if (!url) {
+      bridgeClient.notifyUser('Please enter a website domain or URL (e.g. stripe.com)', 'warning');
+      return;
+    }
+
+    let domain = url.toLowerCase().replace(/^https?:\/\//i, '').replace(/^www\./i, '').split('/')[0];
+    const brandBase = domain.split('.')[0];
+    const brandTitle = brandBase.charAt(0).toUpperCase() + brandBase.slice(1);
+
+    const knownBrands = {
+      stripe: ['#635BFF', '#00D4FF', '#0A2540'],
+      linear: ['#5E6AD2', '#222326', '#4EA8DE'],
+      airbnb: ['#FF385C', '#00A699', '#FC642D'],
+      spotify: ['#1DB954', '#191414', '#1ED760'],
+      github: ['#24292F', '#0969DA', '#2DA44E'],
+      vercel: ['#000000', '#0070F3', '#50E3C2'],
+      figma: ['#F24E1E', '#A259FF', '#1ABCFE'],
+      slack: ['#4A154B', '#36C5F0', '#2EB67D'],
+      uber: ['#000000', '#276EF1', '#05A357']
+    };
+
+    const colors = knownBrands[brandBase] || ['#C2410C', '#2563EB', '#10B981'];
+
+    const extracted = {
+      brandName: brandTitle,
+      colors,
+      font: 'Inter'
+    };
+
+    this.applyExtractedBrandTokens(extracted, domain);
+    this.lastImportedResult = {
+      extracted,
+      fileName: domain,
+      fileSize: 'Online'
+    };
+
+    this.render();
+    bridgeClient.notifyUser(`✓ Successfully extracted brand tokens from "${domain}"!`, 'success');
+  }
+
+  isColorNeutral(hex) {
+    const rgb = hexToRgb(hex);
+    const max = Math.max(rgb.r, rgb.g, rgb.b);
+    const min = Math.min(rgb.r, rgb.g, rgb.b);
+    const delta = max - min;
+    const brightness = (rgb.r + rgb.g + rgb.b) / 3;
+    const saturation = max === 0 ? 0 : delta / max;
+    return saturation < 0.22 || brightness > 242 || brightness < 28;
+  }
+
+  extractBrandNameFromTextOrFile(text, fileName) {
+    if (text) {
+      const titleMatch = text.match(/\/Title\s*\(([^)]+)\)/);
+      if (titleMatch && titleMatch[1] && titleMatch[1].trim().length > 2) {
+        const t = titleMatch[1].replace(/brand[\s_-]*guidelines?/gi, '').replace(/style[\s_-]*guide/gi, '').trim();
+        if (t.length > 1) return t;
+      }
+    }
+
+    let base = (fileName || 'Brand Guidelines').replace(/\.(pdf|json|txt|docx)$/i, '');
+    base = base.replace(/brand[\s_-]*(?:guidelines?|guides?)/gi, '')
+               .replace(/style[\s_-]*guides?/gi, '')
+               .replace(/manuals?/gi, '')
+               .replace(/design[\s_-]*systems?/gi, '')
+               .replace(/[-_]/g, ' ')
+               .replace(/\b(v\d+|final|202\d|revised|copy)\b/gi, '')
+               .trim();
+    if (!base) {
+      base = (fileName || 'Brand Guidelines').replace(/\.(pdf|json|txt|docx)$/i, '').replace(/[-_]/g, ' ').trim();
+    }
+    return base.split(' ').filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+  }
+
+  applyExtractedBrandTokens(data, fileName) {
+    if (!data || !data.colors || data.colors.length === 0) return;
+
+    this.tokens.brand.name = data.brandName + ' Design System';
+    this.tokens.brand.description = `Brand guidelines imported from ${fileName || 'PDF'} on ${new Date().toLocaleDateString()}`;
+
+    const primaryHex = data.colors[0];
+    this.tokens.brand.primary = {
+      name: `${data.brandName} Primary`,
+      base: primaryHex,
+      shades: generateTonalPalette(primaryHex)
+    };
+
+    const secondaryHex = data.colors[1] || '#2563EB';
+    this.tokens.brand.secondary = {
+      name: `${data.brandName} Secondary`,
+      base: secondaryHex,
+      shades: generateTonalPalette(secondaryHex)
+    };
+
+    const tertiaryHex = data.colors[2] || '#10B981';
+    this.tokens.brand.tertiary = {
+      name: `${data.brandName} Accent`,
+      base: tertiaryHex,
+      shades: generateTonalPalette(tertiaryHex)
+    };
+
+    if (data.colors.length > 3) {
+      if (!this.tokens.customColors) this.tokens.customColors = [];
+      const extraColors = data.colors.slice(3, 7);
+      extraColors.forEach((hex, idx) => {
+        const existingIdx = this.tokens.customColors.findIndex(c => c.base.toUpperCase() === hex.toUpperCase());
+        if (existingIdx === -1) {
+          this.tokens.customColors.push({
+            id: `custom-imported-${Date.now()}-${idx}`,
+            name: `${data.brandName} Accent ${idx + 1}`,
+            role: 'Imported Brand Accent',
+            base: hex,
+            shades: generateTonalPalette(hex)
+          });
+        }
+      });
+    }
+
+    if (data.font && this.tokens.typographyTokens) {
+      this.tokens.typographyTokens.fontFamilySans = `"${data.font}", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+    }
+
+    this.saveTokens();
   }
 }

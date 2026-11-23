@@ -1,0 +1,794 @@
+/* AI Design System Creator - Auth & Multi-Design Systems Styling */
+
+/* =========================================================
+   1. Authentication Screen (Login & Register)
+   ========================================================= */
+.app-auth-container {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: radial-gradient(circle at 15% 20%, #F5F3FF 0%, #FFFFFF 45%, #FFF7ED 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+[data-theme="dark"] .app-auth-container {
+  background: radial-gradient(circle at 15% 20%, #1E1B4B 0%, #0F172A 50%, #1F1610 100%);
+}
+
+.auth-card {
+  width: 520px;
+  max-width: 95vw;
+  background: var(--bg-window, #FFFFFF);
+  border: 1px solid var(--border-frame, #E2E8F0);
+  border-radius: 18px;
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: modalCardScale 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.auth-header {
+  padding: 24px 28px 18px 28px;
+  text-align: center;
+  background: linear-gradient(180deg, rgba(124, 58, 237, 0.04) 0%, transparent 100%);
+  border-bottom: 1px solid var(--border-subtle, #E2E8F0);
+}
+
+.auth-brand-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #7C3AED;
+  background: rgba(124, 58, 237, 0.08);
+  border: 1px solid rgba(124, 58, 237, 0.2);
+  padding: 4px 12px;
+  border-radius: 20px;
+  margin-bottom: 10px;
+}
+
+.auth-header h2 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary, #0F172A);
+  margin: 0 0 4px 0;
+}
+
+.auth-header p {
+  font-size: 13px;
+  color: var(--text-secondary, #64748B);
+  margin: 0;
+}
+
+/* Demo Credentials Banner */
+.demo-creds-box {
+  margin: 18px 24px 0 24px;
+  background: #FFFBEB;
+  border: 1px solid #FDE68A;
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+[data-theme="dark"] .demo-creds-box {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.demo-creds-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #92400E;
+}
+
+[data-theme="dark"] .demo-creds-head {
+  color: #FCD34D;
+}
+
+.demo-login-buttons-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.btn-demo-quick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #FFFFFF;
+  border: 1px solid #FCD34D;
+  color: #78350F;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+}
+
+[data-theme="dark"] .btn-demo-quick {
+  background: #1E293B;
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #FDE68A;
+}
+
+.btn-demo-quick:hover {
+  background: #FEF3C7;
+  border-color: #F59E0B;
+  transform: translateY(-1px);
+}
+
+.btn-demo-quick .demo-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #F59E0B;
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.demo-info-text {
+  font-size: 11px;
+  color: #B45309;
+  line-height: 1.4;
+  margin: 0;
+}
+
+[data-theme="dark"] .demo-info-text {
+  color: #FDE68A;
+}
+
+.demo-info-text code {
+  background: rgba(0, 0, 0, 0.05);
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+}
+
+/* Tabs: Sign In / Create Account */
+.auth-tabs-row {
+  display: flex;
+  padding: 16px 24px 0 24px;
+  gap: 6px;
+  border-bottom: 1px solid var(--border-subtle, #E2E8F0);
+}
+
+.auth-tab-btn {
+  flex: 1;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-secondary, #64748B);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.auth-tab-btn:hover {
+  color: var(--text-primary, #0F172A);
+}
+
+.auth-tab-btn.active {
+  color: #7C3AED;
+  border-bottom-color: #7C3AED;
+}
+
+.auth-body {
+  padding: 20px 24px 24px 24px;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.auth-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.auth-form label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary, #334155);
+}
+
+.auth-error-banner {
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  color: #991B1B;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: modalFadeIn 0.15s ease;
+}
+
+.btn-auth-submit {
+  width: 100%;
+  padding: 11px 16px;
+  background: #7C3AED;
+  color: #FFFFFF;
+  border: none;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.btn-auth-submit:hover {
+  background: #6D28D9;
+}
+
+/* =========================================================
+   2. Design System Switcher Dropdown in Top Navbar
+   ========================================================= */
+.ds-switcher-container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.nav-ds-switcher-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-window, #FFFFFF);
+  border: 1px solid var(--border-subtle, #E2E8F0);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #0F172A);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.nav-ds-switcher-btn:hover {
+  background: var(--bg-surface, #F8FAFC);
+  border-color: #7C3AED;
+}
+
+.ds-color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+
+.ds-name-label {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ds-chevron {
+  font-size: 11px;
+  color: var(--text-secondary, #64748B);
+}
+
+/* Popover Dropdown */
+.ds-switcher-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 290px;
+  background: var(--bg-window, #FFFFFF);
+  border: 1px solid var(--border-frame, #E2E8F0);
+  border-radius: 12px;
+  box-shadow: 0 15px 35px -5px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  padding: 8px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  animation: modalFadeIn 0.15s ease;
+}
+
+.ds-dropdown-header {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-tertiary, #94A3B8);
+  padding: 6px 10px 4px 10px;
+}
+
+.ds-switch-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  text-align: left;
+  width: 100%;
+}
+
+.ds-switch-item:hover {
+  background: var(--bg-surface, #F8FAFC);
+  border-color: var(--border-subtle, #E2E8F0);
+}
+
+.ds-switch-item.active {
+  background: rgba(124, 58, 237, 0.06);
+  border-color: rgba(124, 58, 237, 0.2);
+}
+
+.ds-item-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ds-item-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #0F172A);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ds-item-meta {
+  font-size: 11px;
+  color: var(--text-secondary, #64748B);
+}
+
+.ds-item-check {
+  font-size: 13px;
+  font-weight: 700;
+  color: #7C3AED;
+}
+
+.ds-dropdown-divider {
+  height: 1px;
+  background: var(--border-subtle, #E2E8F0);
+  margin: 4px 0;
+}
+
+.ds-dropdown-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #7C3AED;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  width: 100%;
+  text-align: left;
+}
+
+.ds-dropdown-action-btn:hover {
+  background: rgba(124, 58, 237, 0.08);
+}
+
+/* =========================================================
+   3. User Profile Dropdown in Top Navbar
+   ========================================================= */
+.nav-user-profile-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.nav-user-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-window, #FFFFFF);
+  border: 1px solid var(--border-subtle, #E2E8F0);
+  border-radius: 20px;
+  padding: 4px 10px 4px 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.nav-user-btn:hover {
+  border-color: #7C3AED;
+}
+
+.user-avatar-circle {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #7C3AED 0%, #3B82F6 100%);
+  color: #FFFFFF;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.user-name-text {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary, #0F172A);
+}
+
+.user-chevron {
+  font-size: 11px;
+  color: var(--text-secondary, #64748B);
+}
+
+.user-profile-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 260px;
+  background: var(--bg-window, #FFFFFF);
+  border: 1px solid var(--border-frame, #E2E8F0);
+  border-radius: 12px;
+  box-shadow: 0 15px 35px -5px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  padding: 8px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  animation: modalFadeIn 0.15s ease;
+}
+
+.user-dropdown-header {
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.user-dropdown-header strong {
+  font-size: 13.5px;
+  color: var(--text-primary, #0F172A);
+}
+
+.user-dropdown-header span {
+  font-size: 11.5px;
+  color: var(--text-secondary, #64748B);
+}
+
+.user-role-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #7C3AED;
+  background: rgba(124, 58, 237, 0.08);
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-top: 4px;
+  align-self: flex-start;
+}
+
+.user-dropdown-divider {
+  height: 1px;
+  background: var(--border-subtle, #E2E8F0);
+  margin: 4px 0;
+}
+
+.user-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-primary, #0F172A);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  width: 100%;
+  text-align: left;
+}
+
+.user-dropdown-item:hover {
+  background: var(--bg-surface, #F8FAFC);
+}
+
+.user-dropdown-item.text-danger {
+  color: #DC2626;
+}
+
+.user-dropdown-item.text-danger:hover {
+  background: #FEF2F2;
+}
+
+/* =========================================================
+   4. Design Systems Hub View (Full-Page Dashboard)
+   ========================================================= */
+.ds-hub-container {
+  padding: 32px 40px;
+  max-width: 1300px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.ds-hub-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ds-hub-header h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary, #0F172A);
+  margin: 0 0 4px 0;
+}
+
+.ds-hub-header p {
+  font-size: 14px;
+  color: var(--text-secondary, #64748B);
+  margin: 0;
+}
+
+.ds-hub-stats-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.hub-stat-card {
+  background: var(--bg-window, #FFFFFF);
+  border: 1px solid var(--border-subtle, #E2E8F0);
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hub-stat-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-tertiary, #94A3B8);
+}
+
+.hub-stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary, #0F172A);
+}
+
+.ds-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 20px;
+}
+
+.ds-hub-card {
+  background: var(--bg-window, #FFFFFF);
+  border: 1.5px solid var(--border-subtle, #E2E8F0);
+  border-radius: 14px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.ds-hub-card:hover {
+  border-color: #7C3AED;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+
+.ds-hub-card.active {
+  border-color: #7C3AED;
+  background: linear-gradient(180deg, rgba(124, 58, 237, 0.03) 0%, #FFFFFF 100%);
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2);
+}
+
+.ds-card-top-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ds-card-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ds-brand-circle {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.08);
+}
+
+.ds-card-title-group h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary, #0F172A);
+  margin: 0;
+}
+
+.ds-active-badge {
+  font-size: 11px;
+  font-weight: 700;
+  background: #ECFDF5;
+  color: #059669;
+  border: 1px solid #A7F3D0;
+  padding: 2px 8px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+.ds-card-desc {
+  font-size: 13px;
+  color: var(--text-secondary, #64748B);
+  line-height: 1.5;
+  margin: 0;
+  flex: 1;
+}
+
+.ds-card-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-secondary, #64748B);
+  padding: 10px 0;
+  border-top: 1px solid var(--border-subtle, #E2E8F0);
+  border-bottom: 1px solid var(--border-subtle, #E2E8F0);
+}
+
+.ds-card-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.ds-framework-tag {
+  background: #F1F5F9;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.ds-card-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* =========================================================
+   5. Create Design System Modal
+   ========================================================= */
+.new-ds-modal-card {
+  width: 580px;
+  max-width: 95vw;
+  background: var(--bg-window, #FFFFFF);
+  border: 1px solid var(--border-frame, #E2E8F0);
+  border-radius: 16px;
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: modalCardScale 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.color-presets-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.color-preset-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.color-preset-btn:hover {
+  transform: scale(1.15);
+}
+
+.color-preset-btn.active {
+  box-shadow: 0 0 0 2px #7C3AED;
+  transform: scale(1.15);
+}
+
+.template-selection-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.template-option-card {
+  border: 1.5px solid #E2E8F0;
+  border-radius: 10px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: #FFFFFF;
+}
+
+.template-option-card:hover {
+  border-color: #CBD5E1;
+  background: #F8FAFC;
+}
+
+.template-option-card.active {
+  border-color: #7C3AED;
+  background: rgba(124, 58, 237, 0.04);
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2);
+}
+
+.template-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0F172A;
+}
+
+.template-desc {
+  font-size: 11px;
+  color: #64748B;
+  line-height: 1.4;
+}

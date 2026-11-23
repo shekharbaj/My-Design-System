@@ -434,7 +434,7 @@
           sseSource.close();
           sseSource = null;
         }
-        sseSource = new EventSource(`${activeBaseUrl}/api/figma/events`);
+        sseSource = new EventSource(`${activeBaseUrl}/api/figma/events?client=figma_plugin`);
 
         sseSource.onopen = () => {
           setOnline('Bridge Live (SSE)');

@@ -9,14 +9,19 @@ import { CodeView } from './views/code-view.js';
 import { FigmaView } from './views/figma-view.js';
 import { TokensView } from './views/tokens-view.js';
 import { DocsView } from './views/docs-view.js';
+import { DSHubView } from './views/ds-hub-view.js';
+import { AuthView } from './views/auth-view.js';
 import { PropModal } from './modals/prop-modal.js';
 import { AnatomyModal } from './modals/anatomy-modal.js';
 import { NewComponentModal } from './modals/new-component.js';
 import { SandboxModal } from './modals/sandbox-modal.js';
 import { ProjectScopeModal } from './modals/project-scope-modal.js';
+import { LLMModal } from './modals/llm-modal.js';
+import { NewDSModal } from './modals/new-ds-modal.js';
 
 class App {
   constructor() {
+    window.app = this;
     this.currentViewInstance = null;
     this.sidebarCollapsed = false;
     this.propModal = new PropModal();
@@ -24,12 +29,67 @@ class App {
     this.newCompModal = new NewComponentModal();
     this.sandboxModal = new SandboxModal();
     this.scopeModal = new ProjectScopeModal();
+    this.llmModal = new LLMModal();
+    this.newDSModal = new NewDSModal();
+    this.authView = null;
 
     this.init();
   }
 
   init() {
-    // Parse URL query parameters (as demonstrated in Javier Cuello's video)
+    // 1. Authentication Gate
+    if (!store.isAuthenticated()) {
+      this.showAuthScreen();
+    } else {
+      this.showMainApp();
+    }
+
+    // Bind auth state events
+    store.subscribe('auth:login', () => {
+      this.showMainApp();
+    });
+    store.subscribe('auth:logout', () => {
+      this.showAuthScreen();
+    });
+
+    // Close open dropdowns on outside click
+    document.addEventListener('click', (e) => {
+      const switcherWrap = document.getElementById('ds-switcher-wrap');
+      const switcherDropdown = document.getElementById('ds-switcher-dropdown');
+      if (switcherDropdown && switcherWrap && !switcherWrap.contains(e.target)) {
+        switcherDropdown.style.display = 'none';
+      }
+
+      const userWrap = document.getElementById('user-profile-wrap');
+      const userDropdown = document.getElementById('user-profile-dropdown');
+      if (userDropdown && userWrap && !userWrap.contains(e.target)) {
+        userDropdown.style.display = 'none';
+      }
+    });
+  }
+
+  showAuthScreen() {
+    const authContainer = document.getElementById('app-auth-container');
+    const desktopFrame = document.getElementById('app-desktop-frame');
+
+    if (desktopFrame) desktopFrame.style.display = 'none';
+    if (authContainer) {
+      authContainer.style.display = 'flex';
+      this.authView = new AuthView(authContainer, (user) => {
+        this.showMainApp();
+      });
+      this.authView.render();
+    }
+  }
+
+  showMainApp() {
+    const authContainer = document.getElementById('app-auth-container');
+    const desktopFrame = document.getElementById('app-desktop-frame');
+
+    if (authContainer) authContainer.style.display = 'none';
+    if (desktopFrame) desktopFrame.style.display = 'flex';
+
+    // Parse URL query parameters
     this.parseUrlParameters();
 
     // Set theme
@@ -44,6 +104,13 @@ class App {
     this.bindGlobalEvents();
     this.setupKeyboardShortcuts();
     this.syncUrlState();
+
+    // First-time LLM Onboarding (Hybrid Architecture setup)
+    if (!store.hasCompletedLLMOnboarding()) {
+      setTimeout(() => {
+        this.llmModal.open({ isFirstTime: true });
+      }, 600);
+    }
   }
 
   parseUrlParameters() {
@@ -67,7 +134,7 @@ class App {
         store.currentSubTab = tabParam.toLowerCase();
       }
 
-      if (viewParam && ['editor', 'preview', 'matrix', 'code', 'figma', 'tokens'].includes(viewParam.toLowerCase())) {
+      if (viewParam && ['editor', 'preview', 'matrix', 'code', 'figma', 'tokens', 'docs', 'ds-hub'].includes(viewParam.toLowerCase())) {
         store.currentView = viewParam.toLowerCase();
       }
     } catch (e) {
@@ -107,6 +174,7 @@ class App {
     store.subscribe('filter:changed', () => this.refreshSidebarList());
     store.subscribe('component:selected', () => {
       this.refreshSidebarList();
+      this.sidebarCollapsed = false;
       if (store.currentView !== 'editor') {
         store.setView('editor');
       }
@@ -128,66 +196,280 @@ class App {
       this.renderTopNav();
       this.refreshSidebarList();
     });
+    store.subscribe('llm:config-changed', () => {
+      this.renderTopNav();
+    });
     store.subscribe('bridge:status', () => this.updateBridgeIndicators());
+
+    // Design Systems Multi-Tenancy Events
+    store.subscribe('ds:switched', () => {
+      this.renderTopNav();
+      this.refreshSidebarList();
+      this.renderActiveView();
+    });
+    store.subscribe('ds:created', () => {
+      this.renderTopNav();
+      this.refreshSidebarList();
+      this.renderActiveView();
+    });
+    store.subscribe('ds:deleted', () => {
+      this.renderTopNav();
+      this.refreshSidebarList();
+      this.renderActiveView();
+    });
+  }
+
+  getLLMModelDisplay() {
+    const cfg = store.getLLMConfig();
+    const prov = store.getLLMProviderInfo(cfg.provider);
+    if (cfg.provider === 'local') return 'Local Engine';
+    if (cfg.model) {
+      const clean = cfg.model.replace(/^gemini-/, 'Gemini ').replace(/^gpt-/, 'GPT-').replace(/^claude-/, 'Claude ').replace(/^llama-/, 'Llama-');
+      return clean.length > 18 ? clean.slice(0, 16) + '...' : clean;
+    }
+    return prov ? prov.name : 'AI Model';
   }
 
   renderTopNav() {
     const nav = document.getElementById('top-navbar');
     if (!nav) return;
 
+    const activeDS = store.getActiveDesignSystem();
+    const systems = store.getDesignSystems() || [];
+    const user = store.getCurrentUser();
+
     nav.innerHTML = `
-      <!-- Top Nav Left: [ Components ] and [ + New component ] and [ Project Scope ] -->
-      <div class="top-nav-left">
-        <button class="nav-components-btn" id="btn-toggle-sidebar" title="Toggle Component Library">
-          <span class="icon">◫</span>
-          <span>Components</span>
-        </button>
-        <button class="nav-new-comp-btn" id="btn-top-new-comp" title="Create New Component (Opens in Popup)">
-          <span>+ New component</span>
-        </button>
-        <button class="nav-scope-btn" id="btn-project-scope" title="Configure Foundations & Components included in this Project (Requirement 12)">
-          <span class="scope-icon">⚙</span>
-          <span>Project Scope <strong class="scope-count-badge">${store.includedComponentIds.size}/${store.components.length}</strong></span>
-        </button>
-        <button class="nav-quick-push-btn" id="btn-quick-push-scope" title="Push all ${store.includedComponentIds.size} selected components to Figma canvas">
-          <span>⚡ Push Scope to Figma</span>
-        </button>
+      <!-- TOP BAR TIER 1: Brand & Global System Context (Extreme Left: Switcher, Extreme Right: User & Global Settings) -->
+      <div class="top-nav-primary-row">
+        <!-- Extreme Left: Design System Switcher Dropdown & Workspace Context -->
+        <div class="top-nav-primary-left">
+          <div class="ds-switcher-container" id="ds-switcher-wrap">
+            <button class="nav-ds-switcher-btn" id="btn-ds-switcher" title="Switch Design System Workspace">
+              <span class="ds-color-dot" style="background: ${activeDS?.brandColor || '#3B82F6'};"></span>
+              <span class="ds-name-label">${activeDS?.name || 'Design System'}</span>
+              <span class="ds-chevron">▾</span>
+            </button>
+            <div class="ds-switcher-dropdown" id="ds-switcher-dropdown" style="display: none;">
+              <div class="ds-dropdown-header">
+                <span>Your Design Systems (${systems.length})</span>
+              </div>
+              <div class="ds-dropdown-list">
+                ${systems.map(ds => `
+                  <div class="ds-switch-item ${ds.id === activeDS?.id ? 'active' : ''}" data-ds-id="${ds.id}">
+                    <span class="ds-color-dot" style="background: ${ds.brandColor || '#3B82F6'};"></span>
+                    <div class="ds-item-info">
+                      <span class="ds-item-name">${ds.name}</span>
+                      <span class="ds-item-meta">${ds.components?.length || 0} comps &bull; ${ds.framework || 'React'}</span>
+                    </div>
+                    ${ds.id === activeDS?.id ? '<span class="ds-item-check">✓</span>' : ''}
+                  </div>
+                `).join('')}
+              </div>
+              <div class="ds-dropdown-divider"></div>
+              <button class="ds-dropdown-action-btn" id="btn-dropdown-create-ds">
+                <span class="action-icon">+</span>
+                <span>Create New Design System</span>
+              </button>
+              <button class="ds-dropdown-action-btn" id="btn-dropdown-all-ds">
+                <span class="action-icon">❖</span>
+                <span>Design Systems Hub</span>
+              </button>
+            </div>
+          </div>
+          <span class="ds-context-pill">${activeDS?.framework || 'React'} &bull; ${store.components.length} Components</span>
+        </div>
+
+        <!-- Extreme Right: AI Status Pill, Theme Segmented Toggle, and User Profile -->
+        <div class="top-nav-primary-right">
+          <!-- AI Model Status & Config Button (Hybrid Architecture) -->
+          <button class="nav-ai-model-btn" id="btn-top-ai-model" title="Change AI Model & Credentials (Hybrid Model)">
+            <span class="ai-spark-icon">✨</span>
+            <span class="ai-model-label">AI: <strong>${this.getLLMModelDisplay()}</strong></span>
+            <span class="ai-status-dot ${store.isLLMConfigured() ? 'active' : ''}"></span>
+            <span style="font-size: 10px; opacity: 0.6; margin-left: 2px;">▾</span>
+          </button>
+
+          <div class="top-nav-divider"></div>
+
+          <!-- System | Light | Dark Segmented Pill -->
+          <div class="theme-segmented-pill">
+            <button class="theme-seg-btn ${store.themeMode === 'system' ? 'active' : ''}" data-mode="system">System</button>
+            <button class="theme-seg-btn ${store.themeMode === 'light' ? 'active' : ''}" data-mode="light">Light</button>
+            <button class="theme-seg-btn ${store.themeMode === 'dark' ? 'active' : ''}" data-mode="dark">Dark</button>
+          </div>
+
+          <div class="top-nav-divider"></div>
+
+          <!-- User Profile Pill & Dropdown (Extreme Right) -->
+          <div class="nav-user-profile-wrap" id="user-profile-wrap">
+            <button class="nav-user-btn" id="btn-user-profile" title="User Profile & Account">
+              <span class="user-avatar-circle">${user?.avatar || 'BB'}</span>
+              <span class="user-name-text">${user?.name ? user.name.split(' ')[0] : 'Bimlendu'}</span>
+              <span class="user-chevron">▾</span>
+            </button>
+            <div class="user-profile-dropdown" id="user-profile-dropdown" style="display: none;">
+              <div class="user-dropdown-header">
+                <strong>${user?.name || 'Bimlendu Bajpayee'}</strong>
+                <span>${user?.email || 'bimlendu@designsystem.io'}</span>
+                <span class="user-role-badge">${user?.role || 'Design Systems Director'}</span>
+              </div>
+              <div class="user-dropdown-divider"></div>
+              <button class="user-dropdown-item" id="btn-user-hub">
+                <span>❖</span>
+                <span>Design Systems Hub</span>
+              </button>
+              <button class="user-dropdown-item" id="btn-user-new-ds">
+                <span>+</span>
+                <span>New Design System</span>
+              </button>
+              <div class="user-dropdown-divider"></div>
+              <button class="user-dropdown-item text-danger" id="btn-user-logout">
+                <span>🚪</span>
+                <span>Log Out</span>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <!-- Top Nav Center: Industry Standard Workflow Steps (Requirement 4) -->
-      <div class="top-nav-workflow-pills">
-        <button class="workflow-step-pill ${store.currentView === 'tokens' ? 'active' : ''}" id="btn-wf-tokens" title="1. Foundations, Tokens, Color Palettes & Brand Guidelines">
-          <span class="wf-step-num">✦ 1.</span>
-          <span>Foundation & Tokens</span>
-        </button>
-        <button class="workflow-step-pill ${store.currentView === 'editor' ? 'active' : ''}" id="btn-wf-components" title="2. Component Anatomy, Props & Variant Matrices">
-          <span class="wf-step-num">◫ 2.</span>
-          <span>Component Contracts</span>
-        </button>
-        <button class="workflow-step-pill ${store.currentView === 'docs' ? 'active' : ''}" id="btn-wf-docs" title="3. Design System Documentation Site & Standards (Requirement 25)">
-          <span class="wf-step-num">📖 3.</span>
-          <span>Documentation Site</span>
-        </button>
-      </div>
+      <!-- TOP BAR TIER 2: Studio Workflow & Tools Navigation Bar -->
+      <div class="top-nav-secondary-row">
+        <!-- Left: Components Drawer Toggle & New Component Button -->
+        <div class="top-nav-secondary-left">
+          <button class="nav-components-btn ${store.currentView === 'editor' && !this.sidebarCollapsed ? 'active' : ''}" id="btn-toggle-sidebar" title="Open Components Library">
+            <span class="icon">◫</span>
+            <span>Components</span>
+          </button>
+          <button class="nav-new-comp-btn" id="btn-top-new-comp" title="Create New Component (Opens in Popup)">
+            <span style="font-size: 15px; font-weight: 700;">+</span>
+            <span>New Component</span>
+          </button>
+        </div>
 
-      <!-- Top Nav Right: Theme Pill -->
-      <div class="top-nav-right">
-        <!-- System | Light | Dark -->
-        <div class="theme-segmented-pill">
-          <button class="theme-seg-btn ${store.themeMode === 'system' ? 'active' : ''}" data-mode="system">System</button>
-          <button class="theme-seg-btn ${store.themeMode === 'light' ? 'active' : ''}" data-mode="light">Light</button>
-          <button class="theme-seg-btn ${store.themeMode === 'dark' ? 'active' : ''}" data-mode="dark">Dark</button>
+        <!-- Center: Floating Workflow Step Pills -->
+        <div class="top-nav-workflow-pills">
+          <button class="workflow-step-pill ${store.currentView === 'tokens' ? 'active' : ''}" id="btn-wf-tokens" title="1. Foundations, Tokens, Color Palettes & Brand Guidelines">
+            <span class="wf-step-num">✦ 1.</span>
+            <span>Foundation & Tokens</span>
+          </button>
+          <button class="workflow-step-pill ${store.currentView === 'editor' ? 'active' : ''}" id="btn-wf-components" title="2. Component Anatomy, Props & Variant Matrices">
+            <span class="wf-step-num">◫ 2.</span>
+            <span>Component Contracts</span>
+          </button>
+          <button class="workflow-step-pill ${store.currentView === 'docs' ? 'active' : ''}" id="btn-wf-docs" title="3. Design System Documentation Site & Standards">
+            <span class="wf-step-num">📖 3.</span>
+            <span>Documentation Site</span>
+          </button>
+        </div>
+
+        <!-- Right: Project Scope & Quick Push to Figma -->
+        <div class="top-nav-secondary-right">
+          <button class="nav-scope-btn" id="btn-project-scope" title="Configure Foundations & Components included in this Project (Requirement 12)">
+            <span class="scope-icon">⚙</span>
+            <span>Project Scope <strong class="scope-count-badge">${store.includedComponentIds.size}/${store.components.length}</strong></span>
+          </button>
+          <button class="nav-quick-push-btn" id="btn-quick-push-scope" title="Push all ${store.includedComponentIds.size} selected components to Figma canvas">
+            <span>⚡ Push Scope to Figma</span>
+          </button>
         </div>
       </div>
     `;
+
+    // Dropdown Toggles
+    const switcherBtn = nav.querySelector('#btn-ds-switcher');
+    const switcherDropdown = nav.querySelector('#ds-switcher-dropdown');
+    if (switcherBtn && switcherDropdown) {
+      switcherBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = switcherDropdown.style.display === 'block';
+        switcherDropdown.style.display = isOpen ? 'none' : 'block';
+        const userDropdown = nav.querySelector('#user-profile-dropdown');
+        if (userDropdown) userDropdown.style.display = 'none';
+      });
+    }
+
+    const userBtn = nav.querySelector('#btn-user-profile');
+    const userDropdown = nav.querySelector('#user-profile-dropdown');
+    if (userBtn && userDropdown) {
+      userBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = userDropdown.style.display === 'block';
+        userDropdown.style.display = isOpen ? 'none' : 'block';
+        if (switcherDropdown) switcherDropdown.style.display = 'none';
+      });
+    }
+
+    // Switcher Dropdown actions
+    const switchItems = nav.querySelectorAll('.ds-switch-item');
+    switchItems.forEach(item => {
+      item.addEventListener('click', () => {
+        const dsId = item.getAttribute('data-ds-id');
+        this.sidebarCollapsed = false;
+        store.switchDesignSystem(dsId);
+        if (store.currentView === 'ds-hub') {
+          store.setView('editor');
+        }
+        if (switcherDropdown) switcherDropdown.style.display = 'none';
+      });
+    });
+
+    const dropdownCreateBtn = nav.querySelector('#btn-dropdown-create-ds');
+    if (dropdownCreateBtn) {
+      dropdownCreateBtn.addEventListener('click', () => {
+        if (switcherDropdown) switcherDropdown.style.display = 'none';
+        this.newDSModal.open();
+      });
+    }
+
+    const dropdownAllBtn = nav.querySelector('#btn-dropdown-all-ds');
+    if (dropdownAllBtn) {
+      dropdownAllBtn.addEventListener('click', () => {
+        if (switcherDropdown) switcherDropdown.style.display = 'none';
+        store.setView('ds-hub');
+      });
+    }
+
+    // User Profile Dropdown actions
+    const userHubBtn = nav.querySelector('#btn-user-hub');
+    if (userHubBtn) {
+      userHubBtn.addEventListener('click', () => {
+        if (userDropdown) userDropdown.style.display = 'none';
+        store.setView('ds-hub');
+      });
+    }
+
+    const userNewDsBtn = nav.querySelector('#btn-user-new-ds');
+    if (userNewDsBtn) {
+      userNewDsBtn.addEventListener('click', () => {
+        if (userDropdown) userDropdown.style.display = 'none';
+        this.newDSModal.open();
+      });
+    }
+
+    const userLogoutBtn = nav.querySelector('#btn-user-logout');
+    if (userLogoutBtn) {
+      userLogoutBtn.addEventListener('click', () => {
+        if (userDropdown) userDropdown.style.display = 'none';
+        store.logout();
+      });
+    }
 
     // Sidebar Toggle
     const sidebarBtn = nav.querySelector('#btn-toggle-sidebar');
     if (sidebarBtn) {
       sidebarBtn.addEventListener('click', () => {
-        this.sidebarCollapsed = !this.sidebarCollapsed;
         const sidebar = document.getElementById('left-sidebar');
-        if (sidebar) sidebar.classList.toggle('collapsed', this.sidebarCollapsed);
+        if (store.currentView !== 'editor') {
+          this.sidebarCollapsed = false;
+          store.setView('editor');
+        } else {
+          this.sidebarCollapsed = !this.sidebarCollapsed;
+        }
+        if (sidebar) {
+          sidebar.style.display = 'flex';
+          sidebar.classList.toggle('collapsed', this.sidebarCollapsed);
+        }
+        sidebarBtn.classList.toggle('active', !this.sidebarCollapsed && store.currentView === 'editor');
       });
     }
 
@@ -232,6 +514,13 @@ class App {
     const wfCompsBtn = nav.querySelector('#btn-wf-components');
     if (wfCompsBtn) {
       wfCompsBtn.addEventListener('click', () => {
+        this.sidebarCollapsed = false;
+        const sidebar = document.getElementById('left-sidebar');
+        if (sidebar) {
+          sidebar.style.display = 'flex';
+          sidebar.classList.remove('collapsed');
+        }
+        if (sidebarBtn) sidebarBtn.classList.add('active');
         store.setView('editor');
       });
     }
@@ -241,6 +530,14 @@ class App {
     if (wfDocsBtn) {
       wfDocsBtn.addEventListener('click', () => {
         store.setView('docs');
+      });
+    }
+
+    // AI Model Selector Pill Click
+    const aiModelBtn = nav.querySelector('#btn-top-ai-model');
+    if (aiModelBtn) {
+      aiModelBtn.addEventListener('click', () => {
+        this.llmModal.open({ isFirstTime: false });
       });
     }
 
@@ -281,6 +578,30 @@ class App {
     }
 
     this.bindSidebarClicks();
+  }
+
+  getTokensForComponent(comp) {
+    if (!comp) return [];
+    const s = comp.styles || {};
+    const compType = (comp.id || '').toLowerCase();
+    const isBtn = compType.includes('button');
+    const surfaceVal = s.hasFill === false ? 'transparent' : (s.bg || (isBtn ? '#C2410C' : '#FFFFFF'));
+    const textVal = s.textColor || (isBtn ? '#FFFFFF' : '#1F2937');
+    const borderVal = s.hasBorder === false ? 'transparent' : (s.borderColor || '#D1D5DB');
+    const radiusVal = (s.cornerRadius >= 9999 ? '999px' : (s.cornerRadius !== undefined ? s.cornerRadius + 'px' : '8px'));
+    const padY = s.padding?.top !== undefined ? s.padding.top + 'px' : '8px';
+    const padX = s.padding?.right !== undefined ? s.padding.right + 'px' : '14px';
+    const fontSz = s.fontSize !== undefined ? s.fontSize + 'px' : '14px';
+
+    return [
+      { name: '--color-surface', val: surfaceVal, color: surfaceVal !== 'transparent', desc: 'Component surface background token' },
+      { name: '--color-text', val: textVal, color: true, desc: 'Foreground text token' },
+      { name: '--color-border', val: borderVal, color: borderVal !== 'transparent', desc: 'Border token' },
+      { name: '--radius-component', val: radiusVal, desc: 'Corner radius token' },
+      { name: '--spacing-padding-y', val: padY, desc: 'Vertical padding token' },
+      { name: '--spacing-padding-x', val: padX, desc: 'Horizontal padding token' },
+      { name: '--font-size-base', val: fontSz, desc: 'Typography font size token' }
+    ];
   }
 
   renderSidebarContent() {
@@ -351,7 +672,10 @@ class App {
               <div class="library-item-row ${isSelected ? 'selected' : ''}" data-id="${comp.id}" title="${comp.name}">
                 <span class="item-name">${comp.name}</span>
                 ${inProject 
-                  ? `<button class="btn-quick-toggle-project in-project" data-comp-id="${comp.id}" title="Included in project (click to remove)">✓</button>` 
+    ? `<button class="btn-quick-toggle-project in-project" data-comp-id="${comp.id}" title="Included in project (click to remove)">
+        <span class="icon-indicator-check">✓</span>
+        <span class="icon-indicator-remove">✕</span>
+       </button>` 
                   : `<button class="btn-quick-toggle-project not-in-project" data-comp-id="${comp.id}" title="Click to add to project">+</button>`
                 }
               </div>
@@ -359,6 +683,32 @@ class App {
           }).join('')}
         </div>
       </div>
+
+      <!-- 3. Active Component Tokens Submenu (Requirement 36) -->
+      ${(() => {
+        const activeComp = store.getActiveComponent();
+        if (!activeComp || store.currentView === 'tokens' || store.currentView === 'ds-hub') return '';
+        const tokens = this.getTokensForComponent(activeComp);
+        return `
+          <div class="sidebar-section-group sidebar-tokens-group">
+            <div class="sidebar-group-header-row">
+              <div class="sidebar-tokens-title-wrap">
+                <span class="sparkle-icon">✦</span>
+                <span class="sidebar-group-title">Active Tokens (<strong>${activeComp.name}</strong>)</span>
+              </div>
+              <button class="btn-copy-sidebar-tokens" id="btn-copy-sidebar-tokens" title="Copy CSS Tokens">📋 Copy</button>
+            </div>
+            <div class="sidebar-tokens-list">
+              ${tokens.map(t => `
+                <div class="sidebar-token-row" title="${t.desc}">
+                  <span class="sidebar-token-name">${t.name}</span>
+                  <span class="sidebar-token-val" style="${t.color ? 'background:' + t.val + '; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.4);' : ''}">${t.val}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      })()}
     `;
   }
 
@@ -432,17 +782,13 @@ class App {
         store.setActiveComponent(id);
       });
     });
+  }
 
-    const clearBtns = document.querySelectorAll('.btn-item-clear');
-    clearBtns.forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const id = btn.getAttribute('data-id');
-        if (confirm(`Remove "${id}" from Drafts?`)) {
-          store.deleteComponent(id);
-        }
-      });
-    });
+  updateTopScopeBadge() {
+    const badge = document.querySelector('.scope-count-badge');
+    if (badge) {
+      badge.textContent = `${store.includedComponentIds.size}/${store.components.length}`;
+    }
   }
 
   refreshSidebarList() {
@@ -457,7 +803,25 @@ class App {
     const container = document.getElementById('app-view-container');
     if (!container) return;
 
+    if (this.currentViewInstance && typeof this.currentViewInstance.destroy === 'function') {
+      this.currentViewInstance.destroy();
+    }
     container.innerHTML = '';
+
+    const sidebar = document.getElementById('left-sidebar');
+    const sidebarToggleBtn = document.getElementById('btn-toggle-sidebar');
+    if (sidebar) {
+      // If we are in ds-hub view, we can collapse or show sidebar cleanly
+      if (store.currentView === 'ds-hub') {
+        sidebar.style.display = 'none';
+      } else {
+        sidebar.style.display = 'flex';
+        sidebar.classList.toggle('collapsed', this.sidebarCollapsed);
+      }
+    }
+    if (sidebarToggleBtn) {
+      sidebarToggleBtn.classList.toggle('active', store.currentView === 'editor' && !this.sidebarCollapsed);
+    }
 
     switch (store.currentView) {
       case 'editor':
@@ -481,17 +845,22 @@ class App {
       case 'docs':
         this.currentViewInstance = new DocsView(container);
         break;
+      case 'ds-hub':
+        this.currentViewInstance = new DSHubView(container);
+        break;
       default:
         this.currentViewInstance = new EditorView(container);
         break;
     }
 
-    // Update top workflow pills highlight (Requirement 4)
+    // Update top workflow pills highlight
     const wfTokensBtn = document.getElementById('btn-wf-tokens');
     const wfCompsBtn = document.getElementById('btn-wf-components');
+    const wfDocsBtn = document.getElementById('btn-wf-docs');
     const sidebarTokensBtn = document.getElementById('btn-sidebar-tokens');
     if (wfTokensBtn) wfTokensBtn.classList.toggle('active', store.currentView === 'tokens');
-    if (wfCompsBtn) wfCompsBtn.classList.toggle('active', store.currentView !== 'tokens');
+    if (wfCompsBtn) wfCompsBtn.classList.toggle('active', store.currentView === 'editor');
+    if (wfDocsBtn) wfDocsBtn.classList.toggle('active', store.currentView === 'docs');
     if (sidebarTokensBtn) sidebarTokensBtn.classList.toggle('active', store.currentView === 'tokens');
 
     // Update view segmented buttons highlight
@@ -513,7 +882,7 @@ class App {
   }
 
   updateBridgeIndicators() {
-    // Optional indicator updates
+    // Bridge indicators if any
   }
 
   setupKeyboardShortcuts() {

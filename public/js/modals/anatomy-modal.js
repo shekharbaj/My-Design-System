@@ -15,6 +15,7 @@ export class AnatomyModal {
 
     this.modalEl = document.createElement('div');
     this.modalEl.className = 'adsc-modal-backdrop';
+    this.selectedNodeId = comp.anatomy ? comp.anatomy.id : null;
     this.modalEl.innerHTML = `
       <div class="adsc-modal-card anatomy-manager-card">
         <!-- Header -->
@@ -23,7 +24,7 @@ export class AnatomyModal {
             <h3>Component Anatomy Hierarchy &bull; ${comp.name}</h3>
             <p class="modal-subtitle">Define nested parts (Outer box, Container, Icon, Label, Slots) &amp; layout topology</p>
           </div>
-          <button class="adsc-btn-icon modal-close-btn" id="btn-close-anatomy-modal">${ICON_SVGS.x}</button>
+          <button class="adsc-btn-icon modal-close-btn" id="btn-close-anatomy-modal" aria-label="Close">${ICON_SVGS.x || '✕'}</button>
         </div>
 
         <!-- Body: Tree Structure & Node Inspector -->
@@ -52,10 +53,19 @@ export class AnatomyModal {
             </div>
           </div>
         </div>
+
+        <!-- Footer Actions -->
+        <div class="anatomy-modal-footer">
+          <span class="anatomy-modal-footer-hint">Hierarchical node updates are automatically saved to your design system contract.</span>
+          <button type="button" class="adsc-btn btn-primary compact" id="btn-done-anatomy-modal">Done</button>
+        </div>
       </div>
     `;
 
     document.body.appendChild(this.modalEl);
+    if (comp.anatomy) {
+      this.renderNodeDetails(comp, comp.anatomy);
+    }
     this.attachEvents(comp);
   }
 
@@ -109,6 +119,9 @@ export class AnatomyModal {
   attachEvents(comp) {
     const closeBtn = this.modalEl.querySelector('#btn-close-anatomy-modal');
     if (closeBtn) closeBtn.addEventListener('click', () => this.close());
+
+    const doneBtn = this.modalEl.querySelector('#btn-done-anatomy-modal');
+    if (doneBtn) doneBtn.addEventListener('click', () => this.close());
 
     this.modalEl.addEventListener('click', (e) => {
       if (e.target === this.modalEl) this.close();

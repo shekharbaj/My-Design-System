@@ -1,14 +1,19 @@
 // AI Design System Creator - New Component Modal
 import { store } from '../store.js';
 import { ICON_SVGS } from '../components-data.js';
+import { llmService } from '../llm-service.js';
 
 export class NewComponentModal {
   constructor() {
     this.modalEl = null;
+    this.synthesizedComponent = null;
   }
 
   open() {
     this.close();
+    this.synthesizedComponent = null;
+    const cfg = store.getLLMConfig();
+    const prov = store.getLLMProviderInfo(cfg.provider);
 
     this.modalEl = document.createElement('div');
     this.modalEl.className = 'adsc-modal-backdrop';
@@ -21,6 +26,35 @@ export class NewComponentModal {
             <p class="modal-subtitle">Add a new component to your design system token library</p>
           </div>
           <button class="adsc-btn-icon modal-close-btn" id="btn-close-new-comp">${ICON_SVGS.x}</button>
+        </div>
+
+        <!-- AI Copilot Prompt-to-Component Bar (Hybrid Architecture) -->
+        <div class="ai-prompt-synthesis-box">
+          <div class="ai-prompt-label-row">
+            <span class="ai-spark-icon">✨</span>
+            <label for="ai-comp-prompt"><strong>Prompt-to-Component AI Generator:</strong></label>
+            <span class="ai-active-model-pill" title="Active Model">${prov ? prov.name : 'AI'} &bull; ${cfg.model || 'Flash'}</span>
+          </div>
+          <div class="ai-prompt-input-row">
+            <input 
+              type="text" 
+              id="ai-comp-prompt" 
+              class="adsc-input" 
+              placeholder="Describe any component (e.g. Floating notification toast with status icon and dismiss)" 
+            />
+            <button type="button" class="adsc-btn btn-ai-generate" id="btn-ai-synthesize">
+              <span class="ai-gen-spinner" style="display: none;">⏳</span>
+              <span class="ai-gen-text">⚡ Synthesize</span>
+            </button>
+          </div>
+          <div class="ai-prompt-chips-row">
+            <span style="font-size: 11px; color: #64748B; font-weight: 500;">Examples:</span>
+            <button type="button" class="ai-prompt-chip" data-prompt="Toast notification banner with alert status icon, title, message and close button">💬 Toast Banner</button>
+            <button type="button" class="ai-prompt-chip" data-prompt="Compact user avatar badge with online indicator dot and fallback initials">👤 Avatar Badge</button>
+            <button type="button" class="ai-prompt-chip" data-prompt="Floating mini shopping cart drawer with quantity counter and checkout button">🛒 Mini Cart</button>
+            <button type="button" class="ai-prompt-chip" data-prompt="Interactive star review rating card with 5 stars and verified customer badge">⭐ Rating Card</button>
+          </div>
+          <div id="ai-synthesis-status" class="ai-synthesis-status" style="display: none;"></div>
         </div>
 
         <!-- Body -->
@@ -107,6 +141,74 @@ export class NewComponentModal {
       rb.addEventListener('click', () => {
         radioBoxes.forEach(b => b.classList.remove('active'));
         rb.classList.add('active');
+        const input = rb.querySelector('input[type="radio"]');
+        if (input) input.checked = true;
+      });
+    });
+
+    // AI Copilot Synthesis Action
+    const aiBtn = this.modalEl.querySelector('#btn-ai-synthesize');
+    const aiInput = this.modalEl.querySelector('#ai-comp-prompt');
+    const spinner = this.modalEl.querySelector('.ai-gen-spinner');
+    const btnText = this.modalEl.querySelector('.ai-gen-text');
+    const statusArea = this.modalEl.querySelector('#ai-synthesis-status');
+
+    const handleSynthesize = async () => {
+      const prompt = aiInput?.value.trim();
+      if (!prompt) return;
+
+      if (aiBtn) aiBtn.disabled = true;
+      if (spinner) spinner.style.display = 'inline-block';
+      if (btnText) btnText.textContent = 'Synthesizing...';
+      if (statusArea) {
+        statusArea.style.display = 'block';
+        statusArea.innerHTML = '<span class="status-loading">⏳ Synthesizing component contract with AI...</span>';
+      }
+
+      try {
+        const cat = this.modalEl.querySelector('#new-comp-category')?.value || 'Actions';
+        const res = await llmService.synthesizeComponent(prompt, cat);
+        if (res.success && res.component) {
+          this.synthesizedComponent = res.component;
+          const nameInput = this.modalEl.querySelector('#new-comp-name');
+          const descInput = this.modalEl.querySelector('#new-comp-desc');
+          if (nameInput) nameInput.value = res.component.name || prompt;
+          if (descInput) descInput.value = res.component.description || `AI Synthesized ${res.component.name}`;
+
+          if (statusArea) {
+            statusArea.innerHTML = `<span class="status-success">✓ Synthesized via ${res.model || 'AI'}! Review below and click "Create Component".</span>`;
+          }
+        }
+      } catch (err) {
+        if (statusArea) {
+          statusArea.innerHTML = `<span class="status-error">Error: ${err.message}</span>`;
+        }
+      } finally {
+        if (aiBtn) aiBtn.disabled = false;
+        if (spinner) spinner.style.display = 'none';
+        if (btnText) btnText.textContent = '⚡ Synthesize';
+      }
+    };
+
+    if (aiBtn) aiBtn.addEventListener('click', handleSynthesize);
+    if (aiInput) {
+      aiInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleSynthesize();
+        }
+      });
+    }
+
+    // AI suggestion chips
+    const chips = this.modalEl.querySelectorAll('.ai-prompt-chip');
+    chips.forEach(chip => {
+      chip.addEventListener('click', () => {
+        const prompt = chip.getAttribute('data-prompt');
+        if (aiInput) {
+          aiInput.value = prompt;
+          handleSynthesize();
+        }
       });
     });
 
@@ -121,7 +223,20 @@ export class NewComponentModal {
 
         const id = name.toLowerCase().replace(/[^a-z0-9]/g, '-');
 
-        const newComp = this.buildComponentTemplate(id, name, category, desc, archetype);
+        let newComp;
+        if (this.synthesizedComponent && this.synthesizedComponent.name === name) {
+          newComp = {
+            ...this.buildComponentTemplate(id, name, category, desc, archetype),
+            ...this.synthesizedComponent,
+            id,
+            name,
+            category,
+            description: desc
+          };
+        } else {
+          newComp = this.buildComponentTemplate(id, name, category, desc, archetype);
+        }
+
         store.createNewComponent(newComp);
         this.close();
       });
